@@ -158,6 +158,7 @@ let rec type_check_var_decl_list
 				if (exists_class_decl p cname) 
 					then ( helper tail_lst) 
 					else typ::( helper tail_lst) 
+			| VoidT ->  typ::( helper tail_lst) 
 			| _ -> ( helper tail_lst) 
 	in match ( helper vlst) with
 		| [] -> 
@@ -351,8 +352,11 @@ let rec type_check_stmts
 			| BoolT -> 
 				begin
 				match then_branch, else_branch with
+				| Some (ObjectT "null"), Some (ObjectT t1) 
+				| Some (ObjectT t1), Some (ObjectT "null") -> 
+					(IfStmt (exprnew, thenlist,elselist),Some (ObjectT t1))
 				| Some t1, Some t2 -> 
-					if (t1!= t2) 
+					if ((compare_jlite_types t1 t2) == false) 
 					then failwith 
 						("\nType-check error in " 
 						^ classid ^ "." ^ string_of_var_id mthd.jliteid 
@@ -405,7 +409,7 @@ let rec type_check_stmts
 				else failwith 
 					("\nType-check error in " 
 					^ classid ^ "." ^ string_of_var_id mthd.jliteid 
-					^ ". Assignment statement failskkk:\n" 
+					^ ". Assignment statement fails:\n" 
 					^ string_of_jlite_stmt s ^ string_of_jlite_type exprtype ^ "\n")
 		| ReadStmt id -> 
 			let (idtype,scopedid) = (find_var_decl_type env id) in
@@ -450,7 +454,7 @@ let rec type_check_stmts
 			 (type_check_expr p env classid e) in
 			let (id_type,idnew) = 
 			 (type_check_expr p env classid id) in 
-			if (expr_type == id_type)
+			if (compare_jlite_types id_type expr_type)
 				then (AssignFieldStmt(idnew,exprnew),None)
 				else failwith 
 					("\nType-check error in " ^ classid ^ "." 
@@ -500,17 +504,8 @@ let type_check_mthd_decl p env cname m : md_decl =
 				^ string_of_jlite_type m.rettype ^ ". \n")
 			| Some (ObjectT "null"), (ObjectT t2) -> 
 				true
-			| Some (ObjectT t1), (ObjectT t2) -> 
-				if ((String.compare t1 t2) != 0) 
-				then failwith 
-					("\nType-check error in " ^ cname ^ "." 
-					^ string_of_var_id m.jliteid 
-					^ ". Type mismatch. Return type of method " 
-					^ "is different from declared type "
-					^ string_of_jlite_type m.rettype ^ t1 ^ ". \n")
-				else true
 			| Some t1, t2 -> 
-				if (t1!= t2) 
+				if ((compare_jlite_types t1 t2) == false) 
 				then failwith 
 					("\nType-check error in " ^ cname ^ "." 
 					^ string_of_var_id m.jliteid 
