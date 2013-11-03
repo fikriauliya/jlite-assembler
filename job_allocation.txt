@@ -1,0 +1,26 @@
+Levi
+(* 5 *) let get_free_register
+(* 4 *)   | ObjectCreate3
+(* 4 *) let ir3_id3_to_arm
+(* 2 *) let ir3_idc3_to_arm
+
+Heryandi
+(* 5 *)   | MdCall3
+(* 3 *)   | MdCallStmt3
+(* 1 *)   | ReturnStmt3
+(* 1 *)   | ReturnVoidStmt3)
+
+Jesper
+(* 3 *)   | BinaryExp3
+(* 2 *)   | UnaryExp3
+(* 1 *)   | Label3
+(* 3 *)   | IfStmt3
+(* 1 *)   | GoTo3
+(* 1 *)   | ReadStmt3
+(* 1 *)   | PrintStmt3
+
+Mr X
+(* 4 *)   | FieldAccess3
+(* 2 *)   | AssignFieldStmt3
+(* 2 *)   | AssignStmt3
+(* 1 *)   | AssignDeclStmt3
