@@ -11,4 +11,4 @@ ocamlc -c jlite_toir3.ml
 ocamlc -c arm_structs.ml
 ocamlc -c jlite_arm.ml
 ocamlc -c jlite_main.ml
-ocamlc -o program jlite_structs.cmo jlite_annotatedtyping.cmo jlite_toir3.cmo jlite_lexer.cmo jlite_parser.cmo arm_structs.cmo jlite_arm.cmo ir3_structs.cmo jlite_main.cmo
+ocamlc -o program jlite_structs.cmo jlite_annotatedtyping.cmo jlite_toir3.cmo jlite_lexer.cmo jlite_parser.cmo ir3_structs.cmo arm_structs.cmo jlite_arm.cmo jlite_main.cmo
