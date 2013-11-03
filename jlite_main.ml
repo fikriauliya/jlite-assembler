@@ -8,7 +8,6 @@ open Printf
 open Jlite_annotatedtyping
 
 open Ir3_structs
-open Jlite_assembler
 
 
 let source_files = ref []
