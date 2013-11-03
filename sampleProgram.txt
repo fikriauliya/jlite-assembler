@@ -1,0 +1,11 @@
+class Sample {
+    void main(Int a) {
+        Int t1;
+        Int t2;
+        Int t3;
+        t1 = 1;
+        t2 = 2;
+        t3 = 3;
+        t3 = t1 + t2;
+    }
+}

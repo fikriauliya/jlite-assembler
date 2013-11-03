@@ -3,3 +3,4 @@
 *.mli
 jlite_lexer.ml
 jlite_parser.ml
+*.swp
