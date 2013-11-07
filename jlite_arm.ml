@@ -12,8 +12,62 @@ type active_spill_variables_type =
 type stack_memory_map_type =
   ((id3 * memory_address_type) list)
 
-let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type =
+(* statement lists, IN block ids, OUT block ids *)
+type basic_block_type = {
+  stmts: ir3_stmt list;
+  mutable in_blocks: int list;
+  out_blocks: int list;
+}
+
+let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
+  let basic_blocks_map = Hashtbl.create 100 in
+  
+  (* Hashtbl.add basic_blocks_map "a" "b"; *)
+  let derive_basic_blocks (stmts: ir3_stmt list) =
+    let rec split_into_blocks stmts stmts_accum cur_block_id = 
+      match stmts with
+      | [] -> basic_blocks_map
+      | (stmt::rests) -> 
+        match stmt with
+          | Label3 label -> begin 
+            Hashtbl.add basic_blocks_map cur_block_id 
+              {
+                stmts = stmts_accum;
+                in_blocks = [];
+                out_blocks = [(label :>int)]
+              };
+            split_into_blocks rests [] (label:>int)
+          end
+          | GoTo3 label -> begin
+            let next_block_id = 0 - cur_block_id in
+            Hashtbl.add basic_blocks_map cur_block_id 
+              {
+                stmts = stmts_accum;
+                in_blocks = [];
+                out_blocks = [(label:> int); next_block_id]
+              };
+            split_into_blocks rests [] next_block_id
+          end
+          | _ -> begin
+            split_into_blocks rests (stmts_accum @ [stmt]) cur_block_id
+          end
+    in
+
+    let fill_in_in_blocks() =
+      Hashtbl.iter (fun k v ->
+        let out_blocks = v.out_blocks in
+        List.iter (fun x -> begin
+          x.in_blocks <- (x.in_blocks @ [k]);
+          ()
+        end) (List.map (Hashtbl.find basic_blocks_map) out_blocks)
+      ) basic_blocks_map
+    in
+    split_into_blocks stmts [] 0
+    (* [] *)
+  in
+  let basic_blocks = derive_basic_blocks stmts in
   [("", (0,0))]
+end
 
 let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type) =
   ([], [])
