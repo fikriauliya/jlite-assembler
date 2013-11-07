@@ -2,15 +2,15 @@ open Arm_structs
 open Ir3_structs
 open Jlite_structs
 
-type memory_address = int
+type memory_address_type = int
 type liveness_timeline_type = ((id3 * (int * int)) list)
 type active_spill_variables_type = 
   (* (active variable set, spill variable set) *)
   ((id3 list) * (id3 list))
 
 (* variable name -> reserved memory address in stack*)
-type stack_memory_map =
-  ((id3 * memory_address) list)
+type stack_memory_map_type =
+  ((id3 * memory_address_type) list)
 
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type =
   [("", (0,0))]
@@ -22,24 +22,22 @@ let derive_stack_memory_map (params: (var_decl3 list)) (localvars: (var_decl3 li
   ([])
 
 (* 5 *)
-let get_register (asvs: active_spill_variables_type) (sm: stack_memory_map) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
-  (* let generate_flow_graph
-  let splits_into_basic_block *)
+let get_register (asvs: active_spill_variables_type) (sm: stack_memory_map_type) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
   ("v1", [])
 
 (* 4 *)
-let ir3_id3_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3): (reg * (arm_instr list)) =
+let ir3_id3_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_type) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3): (reg * (arm_instr list)) =
   ("v1", [])
 
 (* 2 *)
-let ir3_idc3_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3): (reg * (arm_instr list)) =
+let ir3_idc3_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_type) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3): (reg * (arm_instr list)) =
   match vidc3 with
   | Var3 vid -> ir3_id3_to_arm asvs sm stmts currstmt vid
   | IntLiteral3 i ->  "#" ^ (string_of_int i), [] (*TODO: replace this stub*)
   | BoolLiteral3 b ->  "#" ^ (string_of_bool b), [] (*TODO: replace this stub*)
   | StringLiteral3 s ->  "#" ^ s, [] (*TODO: replace this stub*)
 
-let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list)) =
+let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_type) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list)) =
   match exp with
   | Idc3Expr (idc) -> ir3_idc3_to_arm asvs sm stmts currstmt idc
   (* 3 *)
@@ -92,7 +90,7 @@ let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map
   (* 4 *)
   | ObjectCreate3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
 
-let ir3_stmt_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map) (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
+let ir3_stmt_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_type) (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
   let ir3_id3_partial = ir3_id3_to_arm asvs sm stmts in
   let ir3_exp_partial = ir3_exp_to_arm asvs sm stmts in
   match stmt with
