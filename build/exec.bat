@@ -1,5 +1,5 @@
 @echo off
-rez.exe ../tests/test_fields.txt
+rez.exe ../our_tests/very_simple.txt
 REM rez.exe ../ex/02.txt
 REM rez.exe ../ex/01.txt > ../ex/01_out.txt
 echo.
