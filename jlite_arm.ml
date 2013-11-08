@@ -30,7 +30,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   let print_basic_blocks_map () =
     Hashtbl.iter (fun k v ->
       println ("======================================================================");
-      println ((string_of_int k) ^ ": ");
+      println ("Block #" ^ (string_of_int k) ^ ": ");
+      println ("In block(s): " ^ (string_of_list v.in_blocks string_of_int ", "));
+      println ("Out block(s): " ^ (string_of_list v.out_blocks string_of_int ", "));
       println (string_of_list v.stmts string_of_ir3_stmt "\n");
       println ("======================================================================");
     )
@@ -41,7 +43,13 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode = 
       let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
       match stmts with
-      | [] -> ()
+      | [] -> 
+        Hashtbl.add basic_blocks_map cur_block_id 
+          {
+            stmts = stmts_accum;
+            in_blocks = [];
+            out_blocks = []
+          };
       | (stmt::rests) ->
         println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ 
           (string_of_int ((List.length mthd_stmts) - (List.length stmts) + 1)) ^ " --> " ^ (string_of_ir3_stmt stmt));
@@ -85,7 +93,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     println "derive_basic_blocks";
     split_into_blocks mthd_stmts [] 0 (-1) true;
     println "fill_in_in_blocks";
-    (* fill_in_in_blocks (); *)
+    fill_in_in_blocks ();
     (* [] *)
   in
   derive_basic_blocks stmts;
