@@ -148,7 +148,11 @@ let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map
             let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
             (* TODO: copy the comparison result from flag bit into somewhere in the register *)
             let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
-            (op1reg, op1instr @ op2instr @ [eqinstr])
+            (* Possible solution to the above problem description *)
+            let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
+            let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#1")) in
+            let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#0")) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr])
           | "<"
           | "<="
           | ">"
