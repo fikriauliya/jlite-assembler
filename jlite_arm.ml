@@ -29,17 +29,22 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   
   let print_basic_blocks_map () =
     Hashtbl.iter (fun k v ->
-      println (string_of_int k))
+      println ("======================================================================");
+      println ((string_of_int k) ^ ": ");
+      println (string_of_list v.stmts string_of_ir3_stmt "\n");
+      println ("======================================================================");
+    )
       basic_blocks_map
   in
   (* Hashtbl.add basic_blocks_map "a" "b"; *)
   let derive_basic_blocks (mthd_stmts: ir3_stmt list) =
-    let rec split_into_blocks stmts stmts_accum cur_block_id = 
-      println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ (string_of_int ((List.length mthd_stmts) - (List.length stmts) + 1)));
+    let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode = 
+      let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
       match stmts with
       | [] -> ()
       | (stmt::rests) ->
-        println (string_of_ir3_stmt stmt);
+        println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ 
+          (string_of_int ((List.length mthd_stmts) - (List.length stmts) + 1)) ^ " --> " ^ (string_of_ir3_stmt stmt));
         match stmt with
           | Label3 label -> begin 
             Hashtbl.add basic_blocks_map cur_block_id 
@@ -48,21 +53,21 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
                 in_blocks = [];
                 out_blocks = [(label :>int)]
               };
-            split_into_blocks rests [] (label:>int)
+            split_into_blocks rests [] (label:>int) non_labeled_block_id false
           end
           | IfStmt3 (_, label) | GoTo3 label -> begin
-            println "IfStmt3 | GoTo3";
-            let next_block_id = (-1) - cur_block_id in
+            (* println "IfStmt3 | GoTo3"; *)
+            let next_block_id = (non_labeled_block_id - 1) in
             Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = stmts_accum;
+                stmts = stmts_accum @ [stmt];
                 in_blocks = [];
                 out_blocks = [(label:> int); next_block_id]
               };
-            split_into_blocks rests [] next_block_id
+            split_into_blocks rests [] next_block_id next_block_id true
           end
           | _ -> begin
-            split_into_blocks rests (stmts_accum @ [stmt]) cur_block_id
+            split_into_blocks rests (stmts_accum @ [stmt]) labeled_block_id non_labeled_block_id appending_mode
           end
     in
 
@@ -78,7 +83,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     in
 
     println "derive_basic_blocks";
-    split_into_blocks mthd_stmts [] 0;
+    split_into_blocks mthd_stmts [] 0 (-1) true;
     println "fill_in_in_blocks";
     (* fill_in_in_blocks (); *)
     (* [] *)
@@ -86,7 +91,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   derive_basic_blocks stmts;
 
   println "print_basic_blocks_map";
-  (* print_basic_blocks_map (); *)
+  print_basic_blocks_map ();
 
   [("", (0,0))]
 end
