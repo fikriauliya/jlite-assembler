@@ -50,8 +50,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
               };
             split_into_blocks rests [] (label:>int)
           end
-          | GoTo3 label -> begin
-            let next_block_id = 0 - cur_block_id in
+          | IfStmt3 (_, label) | GoTo3 label -> begin
+            println "IfStmt3 | GoTo3";
+            let next_block_id = (-1) - cur_block_id in
             Hashtbl.add basic_blocks_map cur_block_id 
               {
                 stmts = stmts_accum;
