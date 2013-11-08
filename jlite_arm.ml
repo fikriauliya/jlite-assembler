@@ -40,6 +40,14 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   in
   (* Hashtbl.add basic_blocks_map "a" "b"; *)
   let derive_basic_blocks (mthd_stmts: ir3_stmt list) =
+    (* END block *)
+    Hashtbl.add basic_blocks_map 0
+      {
+        stmts = [];
+        in_blocks = [];
+        out_blocks = []
+      };
+
     let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode = 
       let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
       match stmts with
@@ -48,7 +56,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
           {
             stmts = stmts_accum;
             in_blocks = [];
-            out_blocks = []
+            out_blocks = [0]
           };
       | (stmt::rests) ->
         println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ 
@@ -74,6 +82,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
               };
             split_into_blocks rests [] next_block_id next_block_id true
           end
+          (* TODO: handle:
+          | ReturnStmt3 of id3
+          | ReturnVoidStmt3 *)
           | _ -> begin
             split_into_blocks rests (stmts_accum @ [stmt]) labeled_block_id non_labeled_block_id appending_mode
           end
