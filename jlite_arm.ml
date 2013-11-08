@@ -167,6 +167,7 @@ let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map
           | "*" ->
             let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
             let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+            (* TODO: destination register dstreg can not be r15 *)
             let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
             let mulinstr = MUL("", false, dstreg, op1reg, op2reg) in
             (op1reg, op1instr @ op2instr @ dstinstr @ [mulinstr])
