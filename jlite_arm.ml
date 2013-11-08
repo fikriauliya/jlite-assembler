@@ -226,8 +226,9 @@ let ir3_stmt_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_ty
   | IfStmt3 (exp, label) ->
     (* TODO: complete the implementation *)
     let (exp_reg, exp_instr) = ir3_exp_partial stmt exp in
-    let if_result = B("", string_of_int(label)) in
-    exp_instr @ [if_result]
+    let cmpinstr = CMP("", exp_reg, ImmedOp("#0")) in
+    let if_result = B("eq", string_of_int(label)) in
+    exp_instr @ [cmpinstr; if_result]
   (* 1 *)
   | GoTo3 label -> 
     let goto_result = B("", (string_of_int label)) in
