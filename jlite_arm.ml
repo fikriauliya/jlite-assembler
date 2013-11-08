@@ -1,6 +1,7 @@
 open Arm_structs
 open Ir3_structs
 open Jlite_structs
+open Printf
 
 type memory_address_type = int
 type liveness_timeline_type = ((id3 * (int * int)) list)
@@ -19,15 +20,26 @@ type basic_block_type = {
   out_blocks: int list;
 }
 
+let println line = begin
+  printf "%s\n" line;
+end
+
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
   let basic_blocks_map = Hashtbl.create 100 in
   
+  let print_basic_blocks_map () =
+    Hashtbl.iter (fun k v ->
+      println (string_of_int k))
+      basic_blocks_map
+  in
   (* Hashtbl.add basic_blocks_map "a" "b"; *)
-  let derive_basic_blocks (stmts: ir3_stmt list) =
+  let derive_basic_blocks (mthd_stmts: ir3_stmt list) =
     let rec split_into_blocks stmts stmts_accum cur_block_id = 
+      println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ (string_of_int ((List.length mthd_stmts) - (List.length stmts) + 1)));
       match stmts with
-      | [] -> basic_blocks_map
-      | (stmt::rests) -> 
+      | [] -> ()
+      | (stmt::rests) ->
+        println (string_of_ir3_stmt stmt);
         match stmt with
           | Label3 label -> begin 
             Hashtbl.add basic_blocks_map cur_block_id 
@@ -53,8 +65,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
           end
     in
 
-    let fill_in_in_blocks() =
+    let fill_in_in_blocks () =
       Hashtbl.iter (fun k v ->
+        (* println (string_of_int k); *)
         let out_blocks = v.out_blocks in
         List.iter (fun x -> begin
           x.in_blocks <- (x.in_blocks @ [k]);
@@ -62,10 +75,18 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
         end) (List.map (Hashtbl.find basic_blocks_map) out_blocks)
       ) basic_blocks_map
     in
-    split_into_blocks stmts [] 0
+
+    println "derive_basic_blocks";
+    split_into_blocks mthd_stmts [] 0;
+    println "fill_in_in_blocks";
+    (* fill_in_in_blocks (); *)
     (* [] *)
   in
-  let basic_blocks = derive_basic_blocks stmts in
+  derive_basic_blocks stmts;
+
+  println "print_basic_blocks_map";
+  (* print_basic_blocks_map (); *)
+
   [("", (0,0))]
 end
 
