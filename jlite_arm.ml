@@ -24,6 +24,12 @@ let println line = begin
   printf "%s\n" line;
 end
 
+(* Returns the relative position of a field data in an object of a given type
+  TODO
+  TODO also take the class as an argument
+*)
+let get_field_shift (field_name:id3) = 0
+
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
   let basic_blocks_map = Hashtbl.create 100 in
   
@@ -216,13 +222,21 @@ let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map
       | _ -> failwith ("Operator not supported")
     end
   (* 4 *)
-  | FieldAccess3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
+  | FieldAccess3 (var_id3, field_name_id3) -> (*failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)*)
+    let (var_reg, var_instr) = ir3_id3_to_arm asvs sm stmts currstmt var_id3 in
+    let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
+    let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_shift field_name_id3, false))
+      (* TODO: handle non-word fields; *)
+      (* TODO: how to get the variable type? *)
+    in dstreg, var_instr @ dstinstr @ [ldr_instr]
   (* 5 *)
   | MdCall3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
   (* 4 *)
   | ObjectCreate3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
 
-let ir3_stmt_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_type) (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
+let ir3_stmt_to_arm
+    (asvs: active_spill_variables_type) (sm: stack_memory_map_type)
+    (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
   let ir3_id3_partial = ir3_id3_to_arm asvs sm stmts in
   let ir3_exp_partial = ir3_exp_to_arm asvs sm stmts in
   match stmt with
