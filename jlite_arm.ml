@@ -185,7 +185,28 @@ let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map
       | _ -> failwith ("Not operand of binary exp")
     end
   (* 2 *)
-  | UnaryExp3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
+  | UnaryExp3 (op, idc) ->
+    begin
+      match op with
+      | UnaryOp op ->
+        begin
+          match op with
+          | "!" ->
+            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc in
+            let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
+            let cmpfalseinstr = CMP("", op1reg, ImmedOp("#0")) in
+            let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#0")) in
+            let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#1")) in
+            (dstreg, op1instr @ dstinstr @ [cmpfalseinstr; mveqinstr; mvneinstr])
+          | "-" ->
+            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc in
+            let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
+            let revsubinstr = RSB("", false, dstreg, op1reg, ImmedOp("#0")) in
+            (dstreg, op1instr @ dstinstr @ [revsubinstr])
+          | _ -> failwith ("Unary operator not supported")
+        end
+      | _ -> failwith ("Operator not supported")
+    end
   (* 4 *)
   | FieldAccess3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
   (* 5 *)
