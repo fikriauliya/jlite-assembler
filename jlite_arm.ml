@@ -72,6 +72,11 @@ let calc_obj_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
 
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
   let print_basic_blocks_map basic_blocks_map =
+    let string_of_enhanced_stmt (e_stmt) =
+      (string_of_ir3_stmt e_stmt.embedded_stmt) ^ " | defs = [ " ^ 
+        (string_of_list e_stmt.defs (fun x -> x) ", ") ^ "] | uses = [ " ^ 
+        (string_of_list e_stmt.uses (fun x -> x) ", ") ^ "]"
+    in
     Hashtbl.iter (fun k (v:basic_block_type) ->
       println ("======================================================================");
       println ("Block #" ^ (string_of_int k) ^ ": ");
@@ -79,7 +84,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       println ("Out block(s): " ^ (string_of_list v.out_blocks string_of_int ", "));
       println ("In variable(s): " ^ (string_of_list v.in_variables (fun x -> x) ", "));
       println ("Out variable(s): " ^ (string_of_list v.out_variables (fun x -> x) ", "));
-     (* println (string_of_list v.stmts.embedded_stmt string_of_ir3_stmt "\n"); *)
+      println (string_of_list v.stmts string_of_enhanced_stmt "\n");
       println ("======================================================================");
     ) basic_blocks_map;
   in
