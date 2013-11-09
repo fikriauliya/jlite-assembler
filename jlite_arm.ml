@@ -500,7 +500,7 @@ let rec ir3_exp_to_arm
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
         (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
-          let (var_reg, var_instr) = ir3_id3_to_arm asvs stack_frame stmts currstmt id3 in
+          let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt id3 in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", arg_index*4, false))]
           (* TODO: Add information about arguments to table here if needed *)
       end
