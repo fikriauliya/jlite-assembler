@@ -818,7 +818,9 @@ let ir3_stmt_to_arm
     [B("", return_label)]
 
 let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) = [
-  COM "Funcion: " ^ mthd.id3;
+  EMPTY;
+  COM ("Funcion: " ^ mthd.id3);
+  EMPTY;
 ]
 
 let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_decl3): (arm_instr list) =

@@ -80,6 +80,7 @@ type arm_instr =
   | BX of cond * reg
   | MUL of multiply_instr_type
   | COM of string
+  | EMPTY
 
 type arm_program = arm_instr list
 
@@ -168,6 +169,7 @@ let string_of_arm_instr instr =
   | BX (c,r) -> "bx" ^ c ^ " " ^ r
   | MUL m -> "mul" ^ string_of_multiply_instr_type m
   | COM s -> "; " ^ s
+  | EMPTY -> ""
 
 let string_of_arm_prog p = 
   string_of_list p string_of_arm_instr "\n\t"
