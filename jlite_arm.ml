@@ -3,6 +3,13 @@ open Ir3_structs
 open Jlite_structs
 open Printf
 
+module Id3Set = Set.Make( 
+  struct
+    let compare = Pervasives.compare
+    type t = id3
+  end 
+)
+
 (*type memory_address_type = int*)
 
 (* Type corresponding to the position of an object inside a record
@@ -23,12 +30,10 @@ type stack_memory_map_type =
 type type_layout =
   (id3 * memory_address_offset) list
 
-
-
 type enhanced_stmt = {
   embedded_stmt: ir3_stmt;
-  defs: id3 list;
-  uses: id3 list;
+  defs: Id3Set.t;
+  uses: Id3Set.t;
 }
 
 (* statement lists, IN block ids, OUT block ids *)
@@ -44,6 +49,9 @@ type basic_block_type = {
 let println line = begin
   printf "%s\n" line;
 end
+
+let id3_set_of_list li = 
+  List.fold_left (fun set elem -> Id3Set.add elem set) Id3Set.empty li
 
 let labelcount = ref 0 
 let fresh_label () = 
@@ -75,8 +83,8 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   let print_basic_blocks_map basic_blocks_map =
     let string_of_enhanced_stmt (e_stmt) =
       (string_of_ir3_stmt e_stmt.embedded_stmt) ^ " | defs = [ " ^ 
-        (string_of_list e_stmt.defs (fun x -> x) ", ") ^ "] | uses = [ " ^ 
-        (string_of_list e_stmt.uses (fun x -> x) ", ") ^ "]"
+        (string_of_list (Id3Set.elements e_stmt.defs) (fun x -> x) ", ") ^ "] | uses = [ " ^ 
+        (string_of_list (Id3Set.elements e_stmt.uses) (fun x -> x) ", ") ^ "]"
     in
     Hashtbl.iter (fun k (v:basic_block_type) ->
       println ("======================================================================");
@@ -138,8 +146,8 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
           in
           {
             embedded_stmt = x;
-            defs = calc_defs;
-            uses = calc_uses;
+            defs = id3_set_of_list calc_defs;
+            uses = id3_set_of_list calc_uses;
           }
         ) stmts
       in
@@ -246,7 +254,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     true => no change in in_variables
     false => any changes in in_variables. Loop again
      *)
-    Hashtbl.fold (fun k v ret ->
+    let res = Hashtbl.fold (fun k v ret ->
       (* Skip EXIT block *)
       if (k == 0) then (ret & true)
       else 
@@ -254,7 +262,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
         v.out_variables = [];
         v.in_variables = [];
         ret & true
-    ) basic_blocks_map true;
+    ) basic_blocks_map true in
     basic_blocks_map
   in
     
