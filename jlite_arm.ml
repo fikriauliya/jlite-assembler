@@ -19,7 +19,6 @@ type active_spill_variables_type =
 
 type reg_allocations = (reg * id3 option ref) list
 
-
 (* variable name -> reserved memory address in stack
 type stack_memory_map_type =
   ((id3 * memory_address_type) list)
@@ -52,7 +51,88 @@ end
 
 let labelcount = ref 0 
 let fresh_label () = 
-  (labelcount := !labelcount+1; "L" ^ (string_of_int !labelcount))
+  (labelcount := !labelcount+1; ".L" ^ (string_of_int !labelcount))
+
+let stringlabelcount = ref 0
+let fresh_string_label () =
+  (stringlabelcount := !stringlabelcount+1; "L" ^ (string_of_int !stringlabelcount))
+
+(* Contains the string literals and format specifiers *)
+let string_table = Hashtbl.create 100
+
+let add_idc3_to_string_table idc3 isPrintStmt =
+  begin
+    match idc3 with
+    | StringLiteral3 str ->
+      Hashtbl.add string_table str (fresh_string_label())
+    | IntLiteral3 _ ->
+      if isPrintStmt then
+        Hashtbl.add string_table "%i" (fresh_string_label())
+      else
+        ()
+    | _ ->
+      ()
+  end
+
+let add_ir3_exp_to_string_table exp3 =
+  begin
+    match exp3 with
+    | BinaryExp3 (_,idc3,idc3') ->
+      add_idc3_to_string_table idc3 false;
+      add_idc3_to_string_table idc3' false
+    | UnaryExp3 (_,idc3) ->
+      add_idc3_to_string_table idc3 false
+    | Idc3Expr (idc3) ->
+      add_idc3_to_string_table idc3 false
+    | MdCall3 (_,idc3list) ->
+      let rec helper idc3s =
+        begin
+          match idc3s with
+          | [] ->
+            ()
+          | idc3::idc3s' ->
+            add_idc3_to_string_table idc3 false;
+            helper idc3s'
+        end
+      in helper idc3list
+    | _ ->
+      ()
+  end
+
+let add_ir3_stmt_to_string_table stmt3 =
+  begin
+    match stmt3 with
+    | IfStmt3 (exp3,_) ->
+      add_ir3_exp_to_string_table exp3
+    | PrintStmt3 (idc3) ->
+      add_idc3_to_string_table idc3 true
+    | AssignStmt3 (_,exp3) ->
+      add_ir3_exp_to_string_table exp3
+    | AssignDeclStmt3 (_,_,exp3) ->
+      add_ir3_exp_to_string_table exp3
+    | AssignFieldStmt3 (exp3,exp3') ->
+      add_ir3_exp_to_string_table exp3;
+      add_ir3_exp_to_string_table exp3'
+    | MdCallStmt3 (exp3) -> 
+      add_ir3_exp_to_string_table exp3
+    | _ ->
+      ()
+  end
+
+let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
+  let rec helper stmts =
+    begin
+      match stmts with
+      | [] ->
+        ()
+      | s::stmts' ->
+        add_ir3_stmt_to_string_table s;
+        helper stmts'
+    end      
+  in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
+
+let var_in_register (rallocs: reg_allocations) (r: reg): (id3 option) =
+  let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
 
 (*
  * Calculate the size of a variable. In fact, every variable has size 4 :)
@@ -275,7 +355,6 @@ end
 let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type) =
   ([], [])
 
-
 (* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
 let derive_precise_layout (clist: cdata3 list) ((cname,decls): cdata3)
     (starting_offset: int) (ascending_order: bool): cname3 * type_layout =
@@ -405,10 +484,9 @@ let rec cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
 
 let rec ir3_exp_to_arm 
-    (localvars: var_decl3 list) (rallocs: reg_allocations)
+    (clist: cdata3 list) (localvars: var_decl3 list) (rallocs: reg_allocations)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
-    (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list)) =
-  
+    (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list) * (arm_instr list)) = 
   let get_assigned_register stmt = match stmt with
   | AssignStmt3(id,_)
   | AssignDeclStmt3(_,id,_)
@@ -416,7 +494,9 @@ let rec ir3_exp_to_arm
   | _ -> failwith "Tried to retrieve the assigned register from a non-assignment statement"
   
   in match exp with
-  | Idc3Expr (idc) -> ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc
+  | Idc3Expr (idc) ->
+    let (reg, instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc in
+    (reg, instr, [])
   (* 3 *)
   | BinaryExp3 (op, idc1, idc2) ->
     begin
@@ -429,10 +509,10 @@ let rec ir3_exp_to_arm
           match bop with
           | "||" ->
             let instr = ORR("", false, dstreg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "&&" ->
             let instr = AND("", false, dstreg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Boolean operand not supported")
         end
       | RelationalOp rop ->
@@ -444,7 +524,7 @@ let rec ir3_exp_to_arm
             let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
             let mveqinstr = MOV(movcond1, false, op1reg, ImmedOp("#1")) in
             let mvneinstr = MOV(movcond2, false, op1reg, ImmedOp("#0")) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr]) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr], []) in
           match rop with
           | "==" ->
             begin
@@ -453,7 +533,7 @@ let rec ir3_exp_to_arm
               let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
               let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
               let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
-              (op1reg, op1instr @ op2instr @ [eqinstr])
+              (op1reg, op1instr @ op2instr @ [eqinstr], [])
             | _ ->  
               relationalOpHelper "eq" "ne"
             end
@@ -477,13 +557,13 @@ let rec ir3_exp_to_arm
           match aop with
           | "+" ->
             let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "*" ->
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr]) 
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
             let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr]) 
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Arithmetic operand not supported")
         end
       | _ -> failwith ("Not operand of binary exp")
@@ -501,10 +581,10 @@ let rec ir3_exp_to_arm
             let cmpfalseinstr = CMP("", op1reg, ImmedOp("#0")) in
             let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#0")) in
             let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#1")) in
-            (dstreg, op1instr @ dstinstr @ [cmpfalseinstr; mveqinstr; mvneinstr])
+            (dstreg, op1instr @ dstinstr @ [cmpfalseinstr; mveqinstr; mvneinstr], [])
           | "-" ->
             let revsubinstr = RSB("", false, dstreg, op1reg, ImmedOp("#0")) in
-            (dstreg, op1instr @ dstinstr @ [revsubinstr])
+            (dstreg, op1instr @ dstinstr @ [revsubinstr], [])
           | _ -> failwith ("Unary operator not supported")
         end
       | _ -> failwith ("Operator not supported")
@@ -517,7 +597,7 @@ let rec ir3_exp_to_arm
     let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name_id3, false))
       (* TODO: handle non-word fields; *)
       (* TODO: how to get the variable type? *)
-    in dstreg, var_instr @ dstinstr @ [ldr_instr]
+    in (dstreg, var_instr @ dstinstr @ [ldr_instr], [])
   (* 5 *)
   | MdCall3 (m_id, args) ->
     let mdargs_to_reg (idc: idc3) (dst: reg): (arm_instr list) = 
@@ -538,37 +618,47 @@ let rec ir3_exp_to_arm
         (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt id3 in
-          var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", arg_index*4, false))]
+          var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
           (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
       if (List.length args) <= arg_index then []
-      else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int arg_index) :: (prepare_reg_args (arg_index + 1) args)
+      else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int (arg_index+1)) @ (prepare_reg_args (arg_index + 1) args)
     in
     let rec prepare_stack_args arg_index args =
       if (List.length args) <= arg_index then []
       (* Push arguments with reverse order.
        * Change if stack frame layout for parameter is changed. *)
-      else (prepare_stack_args (arg_index + 1) args) @ [mdargs_to_stack (List.nth args arg_index) arg_index]
+      else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index)
     in
     let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
-    let args_space = 4 * (List.length args) in
-    let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (args_space))) in
+    let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
+    let prepare_args args = 
+      begin
+        let first_four_args = prepare_reg_args 0 args in
+        let rest_args = prepare_stack_args 4 args in
+        first_four_args @ rest_args
+      end
+    in
     let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("v1", caller_save :: allocate_args_stack :: [caller_load])
+    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args), [caller_load])
     (* Manage caller registers *)
     (* Manage arguments!! *)
     (* Get return value from a1 *)
   (* 4 *)
-  | ObjectCreate3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
+  | ObjectCreate3 class_name ->
+    let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
+    let movinstr = MOV("",false,"a1",ImmedOp("#" ^ string_of_int objectSize)) in
+    let blinstr = BL("","_Znwj(PLT)") in
+    ("a1", [movinstr; blinstr], [])
 
 let ir3_stmt_to_arm
-    (localvars: var_decl3 list) (rallocs: reg_allocations) (return_label: label)
+    (clist: cdata3 list) (localvars: var_decl3 list) (rallocs: reg_allocations) (return_label: label)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
     (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
   let ir3_id3_partial = ir3_id3_to_arm rallocs stack_frame stmts in
-  let ir3_exp_partial = ir3_exp_to_arm localvars rallocs stack_frame type_layouts stmts in
+  let ir3_exp_partial = ir3_exp_to_arm clist localvars rallocs stack_frame type_layouts stmts in
   match stmt with
   (* 1 *)
   | Label3 label ->
@@ -577,9 +667,9 @@ let ir3_stmt_to_arm
   (* 3 *)
   | IfStmt3 (exp, label) ->
     (* TODO: complete the implementation *)
-    let (exp_reg, exp_instr) = ir3_exp_partial stmt exp in
+    let (exp_reg, exp_instr, post_instr) = ir3_exp_partial stmt exp in
     let if_result = B("eq", string_of_int(label)) in
-    exp_instr @ [if_result]
+    exp_instr @ [if_result] @ post_instr
   (* 1 *)
   | GoTo3 label -> 
     let goto_result = B("", (string_of_int label)) in
@@ -587,21 +677,36 @@ let ir3_stmt_to_arm
   (* 1 *)
   | ReadStmt3 _ -> failwith ("ReadStmt3: STATEMENT NOT IMPLEMENTED")
   (* 1 *)
-  | PrintStmt3 _ -> failwith ("PrintStmt3: STATEMENT NOT IMPLEMENTED")
+  | PrintStmt3 idc3 ->
+    begin
+      match idc3 with
+      | StringLiteral3 str ->
+        let label = Hashtbl.find string_table str in
+        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
+        let blinstr = BL("","printf(PLT)") in
+        [ldrinstr; blinstr]
+      | IntLiteral3 i ->
+        let label = Hashtbl.find string_table "%i" in
+        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
+        let movinstr = MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i))) in
+        let blinstr = BL("","printf(PLT)") in
+        [ldrinstr; movinstr; blinstr]
+      | _ -> failwith ("PrintStmt3: currently only supports string literals")
+    end
   (* 2 *)
   | AssignStmt3 (id, exp) ->
     let (id_reg_dst, id_instr) = ir3_id3_partial stmt id in
-    let (exp_reg_dst, exp_instr) = ir3_exp_partial stmt exp in
+    let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
     let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
-    id_instr @ exp_instr @ [move_result]
+    id_instr @ exp_instr @ [move_result] @ post_instr
   (* 1 *)
   | AssignDeclStmt3 _ -> failwith ("AssignDeclStmt3: STATEMENT NOT IMPLEMENTED")
   (* 2 *)
   | AssignFieldStmt3 _ -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED")
   (* 3 *)
   | MdCallStmt3 exp ->
-    let (exp_reg_dst, exp_instr) = ir3_exp_partial stmt exp in
-    exp_instr
+    let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
+    exp_instr @ post_instr
   (* 1 *)
   | ReturnStmt3 id ->
     (* Use register allocator's method to force a1 later *)
@@ -643,9 +748,16 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (* Callee stack & register management END *)
   let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
-  let ir3_stmt_partial = ir3_stmt_to_arm localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
+  let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
   method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
+  add_ir3_program_to_string_table (classes, main_method, methods);
   let ir3_method_partial = ir3_method_to_arm classes in
-  List.flatten (List.map ir3_method_partial (main_method :: methods))
+  let dataSegment = PseudoInstr ".data" in
+  let string_table_to_arm = Hashtbl.fold 
+    (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
+  let textSegment = PseudoInstr ".text" in
+  let mainExport = PseudoInstr ".global main" in
+  [dataSegment] @ string_table_to_arm @ [textSegment; mainExport] @
+  (List.flatten (List.map ir3_method_partial (main_method :: methods)))
