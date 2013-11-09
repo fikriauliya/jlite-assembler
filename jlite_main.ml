@@ -28,7 +28,19 @@ let parse_file file_name =
     close_in org_in_chnl;
     prog 
   with
-    End_of_file -> exit 0	  
+  (*  End_of_file -> exit 0	  *)
+  | exn ->
+      begin
+        let curr = lexbuf.Lexing.lex_curr_p in
+        let line, cnum, tok =
+          curr.Lexing.pos_lnum,
+            curr.Lexing.pos_cnum - curr.Lexing.pos_bol,
+          Lexing.lexeme lexbuf in
+    let _ = prerr_string ("Error at ["^(string_of_int line)
+                 ^" : "^(string_of_int cnum)
+                 ^"] on '"^tok^"'\n") in
+    raise (Failure (Printexc.to_string exn))
+      end
 
 let process file_name prog  = 
   begin
