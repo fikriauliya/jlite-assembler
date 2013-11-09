@@ -1,0 +1,13 @@
+class Simple {
+	void main () {
+		Int v;
+		A a;
+		v = 1  + 2 + 3;
+		v = a.x;
+	}
+}
+
+class A {
+	Int x;
+	Int y;
+}
