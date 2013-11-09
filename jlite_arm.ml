@@ -502,6 +502,16 @@ let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): ar
   let str = STR("", "", src_reg, RegPreIndexed("fp", offset, false)) in
   [str]
 
+let spill_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
+  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = src_reg) rallocs in
+  let _ = (var_option := None) in
+  store_variable stack_frame src_reg var_name
+
+let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
+  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = dst_reg) rallocs in
+  let _ = (var_option := None) in
+  load_variable stack_frame dst_reg var_name
+
 (* 5 
 let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
   ("v1", [])
@@ -652,36 +662,18 @@ let rec ir3_exp_to_arm
       | AritmeticOp aop ->
         begin
           let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
+          let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match aop with
           | "+" ->
-            begin
-              match idc2 with
-              | IntLiteral3 i ->
-                let instr = ADD("", false, dstreg, op1reg, ImmedOp("# " ^ string_of_int i)) in
-                (dstreg, op1instr @ dstinstr @ [instr], [])
-              | Var3 _ ->
-                let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
-                let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
-                (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
-              | _ -> failwith ("Arithmetic operand not supported")
-            end
+            let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "*" ->
-            let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
-            begin
-              match idc2 with
-              | IntLiteral3 i ->
-                let instr = SUB("", false, dstreg, op1reg, ImmedOp("# " ^ string_of_int i)) in
-                (dstreg, op1instr @ dstinstr @ [instr], [])
-              | Var3 _ ->
-                let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
-                let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
-                (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
-              | _ -> failwith ("Aritmetic operand not supported")
-            end
+            let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Arithmetic operand not supported")
         end
       | _ -> failwith ("Not operand of binary exp")
@@ -726,8 +718,19 @@ let rec ir3_exp_to_arm
       (* TODO: Replace with the address of string later *)
       | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
       (* TODO: Spill and allocate to register *)
-      | Var3 id3 -> [MOV("", false, dst, ImmedOp("#" ^ id3))]
-      (* TODO: Add information about arguments to table here if needed *)
+      | Var3 id3 ->
+        begin
+          let mov_arg_to_reg = load_variable stack_frame dst id3 in
+          let curr_reg_var = var_in_register rallocs dst in
+          match curr_reg_var with
+          | Some v ->
+            if v <> id3 then
+              begin
+                store_variable stack_frame dst v @ mov_arg_to_reg
+              end
+            else []
+          | None -> mov_arg_to_reg
+        end
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
       begin
@@ -904,7 +907,19 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   add_ir3_program_to_string_table (classes, main_method, methods);
-  let ir3_method_partial = ir3_method_to_arm classes in
+  let rallocs = [
+    "a1", ref None;
+    "a2", ref None;
+    "a3", ref None;
+    "a4", ref None;
+    "v1", ref None;
+    "v2", ref None;
+    "v3", ref None;
+    "v4", ref None;
+    "v5", ref None;
+    (* TODO: use other registers for variables? *)
+  ] in
+  let ir3_method_partial = ir3_method_to_arm classes rallocs in
   let dataSegment = PseudoInstr ".data" in
   let string_table_to_arm = Hashtbl.fold 
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
