@@ -27,8 +27,8 @@ type type_layout =
 
 type enhanced_stmt = {
   embedded_stmt: ir3_stmt;
-  def: id3 list;
-  use: id3 list;
+  defs: id3 list;
+  uses: id3 list;
 }
 
 (* statement lists, IN block ids, OUT block ids *)
@@ -90,20 +90,51 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       };
 
     let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode skip = 
-      let to_enhanced_statements (stmts) = 
+      let ir3stmts_to_enhanced_stmts (stmts) = 
+        let get_uses_from_ir3exp(e: ir3_exp): (id3 list) = 
+          let get_uses_from_idc3 (idc3_val : idc3) = 
+            match idc3_val with
+              | Var3 id3_val -> [id3_val]
+              | _ -> []
+          in
+          match e with
+            | BinaryExp3 (_, idc3_1, idc3_2) -> (get_uses_from_idc3 idc3_1) @ (get_uses_from_idc3 idc3_2)
+            | UnaryExp3 (_, idc3_1) -> (get_uses_from_idc3 idc3_1)
+            | FieldAccess3 (id3_1, id3_2) -> [id3_1; id3_2]
+            | Idc3Expr (idc3_1) -> (get_uses_from_idc3 idc3_1)
+            | MdCall3 (id3_1, idc3s) -> [id3_1] @ (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
+            | ObjectCreate3 _ -> []
+            | _ -> []
+        in
         List.map (fun x -> 
+          let (calc_defs, calc_uses) = match x with
+            | IfStmt3 (e, _)  -> ([], (get_uses_from_ir3exp e))
+            | PrintStmt3 (Var3 res) -> ([], [res])
+            | AssignStmt3 (res, e) -> ([res], (get_uses_from_ir3exp e))
+            | AssignDeclStmt3 (_, res, e) -> ([res], (get_uses_from_ir3exp e))
+            | AssignFieldStmt3 (FieldAccess3 (res_v, res_f), e) -> ([], [res_v] @ (get_uses_from_ir3exp e))
+            | MdCallStmt3 e ->  ([], (get_uses_from_ir3exp e))
+            | ReturnStmt3 res ->  ([], [res])
+            (* The followings return empty *)
+            (* | Label3 label3 ->  *)
+            (* | GoTo3 label3  ->  *)
+            (* | ReadStmt3 id3 ->  *)
+            (* | ReturnVoidStmt3 ->  *)
+            | _ -> ([], [])
+          in
           {
             embedded_stmt = x;
-            def = [];
-            use = [];
-          }) stmts
+            defs = calc_defs;
+            uses = calc_uses;
+          }
+        ) stmts
       in
       let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
       match stmts with
       | [] -> 
         Hashtbl.add basic_blocks_map cur_block_id 
           {
-            stmts = to_enhanced_statements(stmts_accum);
+            stmts = ir3stmts_to_enhanced_stmts(stmts_accum);
             in_blocks = [];
             out_blocks = [0];
             in_variables = [];
@@ -118,7 +149,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = to_enhanced_statements(stmts_accum);
+                stmts = ir3stmts_to_enhanced_stmts(stmts_accum);
                 in_blocks = [];
                 out_blocks = [(label :>int)];
                 in_variables = [];
@@ -131,7 +162,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = to_enhanced_statements(stmts_accum @ [stmt]);
+                stmts = ir3stmts_to_enhanced_stmts(stmts_accum @ [stmt]);
                 in_blocks = [];
                 out_blocks = [(label:> int)];
                 in_variables = [];
@@ -146,7 +177,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = to_enhanced_statements(stmts_accum @ [stmt]);
+                stmts = ir3stmts_to_enhanced_stmts(stmts_accum @ [stmt]);
                 in_blocks = [];
                 out_blocks = [(label:> int); next_block_id];
                 in_variables = [];
@@ -164,7 +195,6 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
 
     let fill_in_in_blocks () =
       Hashtbl.iter (fun k v ->
-        (* println (string_of_int k); *)
         let out_blocks = v.out_blocks in
         List.iter (fun x -> begin
           x.in_blocks <- (x.in_blocks @ [k]);
