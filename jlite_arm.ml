@@ -532,11 +532,13 @@ let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
         List.find (fun (regn,varn) -> not
           (* picks the first register that doesn't hold a var in no_spill_vars *)
           (List.exists (fun n -> match !varn with None -> false | Some v -> n = v) no_spill_vars)) rallocs in
-      let spilled_reg, spilled_var = pick_spill_reg() in
-      let spilled_var = match !spilled_var with Some v -> v | _ -> failwith "unexpected quirk" in
+      let spilled_reg, spilled_var_ref = pick_spill_reg() in
+      let spilled_var = match !spilled_var_ref with Some v -> v | _ -> failwith "unexpected quirk" in
+      let store_instrs = store_variable stack_frame spilled_reg spilled_var in
+      let () = spilled_var_ref := None in
       
       spilled_reg,
-        (store_variable stack_frame spilled_reg spilled_var)
+        store_instrs
 (*      @ (load_variable stack_frame spilled_reg var_id) *)
       @ maybe_load spilled_reg var_id
   in
