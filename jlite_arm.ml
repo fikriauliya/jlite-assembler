@@ -180,9 +180,7 @@ let rec ir3_exp_to_arm
           | "==" ->
             let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
             let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
-            (* TODO: copy the comparison result from flag bit into somewhere in the register *)
             let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
-            (* Possible solution to the above problem description *)
             let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
             begin
               match idc2 with
@@ -196,6 +194,13 @@ let rec ir3_exp_to_arm
                 (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr])
             end
           | "<"
+            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
+            let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+            let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
+            let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
+            let mveqinstr = MOV("lt", false, dstreg, ImmedOp("#1")) in
+            let mvneinstr = MOV("ge", false, dstreg, ImmedOp("#0")) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr])
           | "<="
           | ">"
           | ">="
