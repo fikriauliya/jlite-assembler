@@ -40,6 +40,7 @@ type enhanced_stmt = {
   uses: Id3Set.t;
   mutable stmt_in_variables: Id3Set.t;
   mutable stmt_out_variables: Id3Set.t;
+  line_number: int;
 }
 
 (* statement lists, IN block ids, OUT block ids *)
@@ -175,10 +176,64 @@ let calc_obj_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
   | _ -> failwith ("calc_object_size: This shouldn't happen")
 
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
+  let ir3stmts_to_enhanced_stmts (stmts) = 
+    let get_uses_from_ir3exp(e: ir3_exp): (id3 list) = 
+      let get_uses_from_idc3 (idc3_val : idc3) = 
+        match idc3_val with
+          | Var3 id3_val -> [id3_val]
+          | _ -> []
+      in
+      match e with
+        | BinaryExp3 (_, idc3_1, idc3_2) -> (get_uses_from_idc3 idc3_1) @ (get_uses_from_idc3 idc3_2)
+        | UnaryExp3 (_, idc3_1) -> (get_uses_from_idc3 idc3_1)
+        | FieldAccess3 (id3_1, id3_2) -> [id3_1; id3_2]
+        | Idc3Expr (idc3_1) -> (get_uses_from_idc3 idc3_1)
+        | MdCall3 (id3_1, idc3s) -> [id3_1] @ (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
+        | ObjectCreate3 _ -> []
+        | _ -> []
+    in
+    List.mapi (fun i x -> 
+      let (calc_defs, calc_uses) = match x with
+        | IfStmt3 (e, _)  -> ([], (get_uses_from_ir3exp e))
+        | PrintStmt3 (Var3 res) -> ([], [res])
+        | AssignStmt3 (res, e) -> ([res], (get_uses_from_ir3exp e))
+        | AssignDeclStmt3 (_, res, e) -> ([res], (get_uses_from_ir3exp e))
+        | AssignFieldStmt3 (FieldAccess3 (res_v, res_f), e) -> ([], [res_v] @ (get_uses_from_ir3exp e))
+        | MdCallStmt3 e ->  ([], (get_uses_from_ir3exp e))
+        | ReturnStmt3 res ->  ([], [res])
+        (* The followings return empty *)
+        (* | Label3 label3 ->  *)
+        (* | GoTo3 label3  ->  *)
+        (* | ReadStmt3 id3 ->  *)
+        (* | ReturnVoidStmt3 ->  *)
+        | _ -> ([], [])
+      in
+      {
+        embedded_stmt = x;
+        defs = id3_set_of_list calc_defs;
+        uses = id3_set_of_list calc_uses;
+        stmt_in_variables = Id3Set.empty;
+        stmt_out_variables = Id3Set.empty;
+        line_number = i;
+      }
+    ) stmts
+  in
+  let get_all_blocks basic_blocks_map =
+    Hashtbl.fold (fun k v ret -> 
+      ret @ [v]
+    ) basic_blocks_map [] in
+
+  let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
+    List.flatten (List.map (fun block -> block.stmts) blocks)
+  in
+
   let string_of_enhanced_stmt (e_stmt) =
+    (string_of_int e_stmt.line_number) ^ " : " ^ 
     (string_of_ir3_stmt e_stmt.embedded_stmt) ^ " | defs = [ " ^ 
     (string_of_list (Id3Set.elements e_stmt.defs) (fun x -> x) ", ") ^ "] | uses = [ " ^ 
-    (string_of_list (Id3Set.elements e_stmt.uses) (fun x -> x) ", ") ^ "]"
+    (string_of_list (Id3Set.elements e_stmt.uses) (fun x -> x) ", ") ^ "] | ins = [ " ^
+    (string_of_list (Id3Set.elements e_stmt.stmt_out_variables) (fun x -> x) ", ") ^ "] | outs = [ " ^
+    (string_of_list (Id3Set.elements e_stmt.stmt_in_variables) (fun x -> x) ", ") ^ "]";
   in
   let print_basic_blocks_map basic_blocks_map =
     Hashtbl.iter (fun k (v:basic_block_type) ->
@@ -193,7 +248,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     ) basic_blocks_map;
   in
   (* Hashtbl.add basic_blocks_map "a" "b"; *)
-  let derive_basic_blocks (mthd_stmts: ir3_stmt list) =
+  let derive_basic_blocks (mthd_stmts: enhanced_stmt list) =
     let basic_blocks_map = Hashtbl.create 100 in
     (* END block *)
     Hashtbl.add basic_blocks_map 0
@@ -206,54 +261,13 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
         block_id = 0;
       };
 
-    let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode skip = 
-      let ir3stmts_to_enhanced_stmts (stmts) = 
-        let get_uses_from_ir3exp(e: ir3_exp): (id3 list) = 
-          let get_uses_from_idc3 (idc3_val : idc3) = 
-            match idc3_val with
-              | Var3 id3_val -> [id3_val]
-              | _ -> []
-          in
-          match e with
-            | BinaryExp3 (_, idc3_1, idc3_2) -> (get_uses_from_idc3 idc3_1) @ (get_uses_from_idc3 idc3_2)
-            | UnaryExp3 (_, idc3_1) -> (get_uses_from_idc3 idc3_1)
-            | FieldAccess3 (id3_1, id3_2) -> [id3_1; id3_2]
-            | Idc3Expr (idc3_1) -> (get_uses_from_idc3 idc3_1)
-            | MdCall3 (id3_1, idc3s) -> [id3_1] @ (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
-            | ObjectCreate3 _ -> []
-            | _ -> []
-        in
-        List.map (fun x -> 
-          let (calc_defs, calc_uses) = match x with
-            | IfStmt3 (e, _)  -> ([], (get_uses_from_ir3exp e))
-            | PrintStmt3 (Var3 res) -> ([], [res])
-            | AssignStmt3 (res, e) -> ([res], (get_uses_from_ir3exp e))
-            | AssignDeclStmt3 (_, res, e) -> ([res], (get_uses_from_ir3exp e))
-            | AssignFieldStmt3 (FieldAccess3 (res_v, res_f), e) -> ([], [res_v] @ (get_uses_from_ir3exp e))
-            | MdCallStmt3 e ->  ([], (get_uses_from_ir3exp e))
-            | ReturnStmt3 res ->  ([], [res])
-            (* The followings return empty *)
-            (* | Label3 label3 ->  *)
-            (* | GoTo3 label3  ->  *)
-            (* | ReadStmt3 id3 ->  *)
-            (* | ReturnVoidStmt3 ->  *)
-            | _ -> ([], [])
-          in
-          {
-            embedded_stmt = x;
-            defs = id3_set_of_list calc_defs;
-            uses = id3_set_of_list calc_uses;
-            stmt_in_variables = Id3Set.empty;
-            stmt_out_variables = Id3Set.empty;
-          }
-        ) stmts
-      in
+    let rec split_into_blocks (stmts: enhanced_stmt list) (stmts_accum: enhanced_stmt list) labeled_block_id non_labeled_block_id appending_mode skip = 
       let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
       match stmts with
       | [] -> 
         Hashtbl.add basic_blocks_map cur_block_id 
           {
-            stmts = ir3stmts_to_enhanced_stmts(stmts_accum);
+            stmts = stmts_accum;
             in_blocks = [];
             out_blocks = [0];
             in_variables = Id3Set.empty;
@@ -262,14 +276,14 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
           };
       | (stmt::rests) ->
         println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ 
-          (string_of_int ((List.length mthd_stmts) - (List.length stmts) + 1)) ^ " --> " ^ (string_of_ir3_stmt stmt));
-        match stmt with
+          (string_of_int ((List.length mthd_stmts) - (List.length stmts) + 1)) ^ " --> " ^ (string_of_enhanced_stmt stmt));
+        match stmt.embedded_stmt with
           | Label3 label -> begin 
             if (skip) then ()
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = ir3stmts_to_enhanced_stmts(stmts_accum);
+                stmts = stmts_accum;
                 in_blocks = [];
                 out_blocks = [(label :>int)];
                 in_variables = Id3Set.empty;
@@ -283,7 +297,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = ir3stmts_to_enhanced_stmts(stmts_accum @ [stmt]);
+                stmts = stmts_accum @ [stmt];
                 in_blocks = [];
                 out_blocks = [(label:> int)];
                 in_variables = Id3Set.empty;
@@ -299,7 +313,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = ir3stmts_to_enhanced_stmts(stmts_accum @ [stmt]);
+                stmts = stmts_accum @ [stmt];
                 in_blocks = [];
                 out_blocks = [(label:> int); next_block_id];
                 in_variables = Id3Set.empty;
@@ -377,14 +391,11 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
 
         let (block_in_variables, is_in_changed) = List.fold_left 
           (fun ((succ_blocks_in_variables: Id3Set.t), is_in_changed) stmt ->
-            println ("processing statement: " ^ (string_of_enhanced_stmt stmt));
             let cur_stmt_out = calculate_out_variables [succ_blocks_in_variables] in
             let cur_stmt_in = calculate_in_variables stmt.uses cur_stmt_out stmt.defs in
-            println (
+            println ("processing statement: " ^ (string_of_enhanced_stmt stmt) ^ " | " ^
               "cur_stmt_out: " ^ (string_of_list (Id3Set.elements cur_stmt_out) (fun x -> x) ", ") ^ " | " ^
-              "prev_stmt_out: " ^ (string_of_list (Id3Set.elements stmt.stmt_out_variables) (fun x -> x) ", ")
-            );
-            println (
+              "prev_stmt_out: " ^ (string_of_list (Id3Set.elements stmt.stmt_out_variables) (fun x -> x) ", ") ^ " | " ^
               "cur_stmt_in: " ^ (string_of_list (Id3Set.elements cur_stmt_in) (fun x -> x) ", ") ^ " | " ^
               "prev_stmt_in: " ^ (string_of_list (Id3Set.elements stmt.stmt_in_variables) (fun x -> x) ", ")
             );
@@ -397,6 +408,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             in
             
             stmt.stmt_in_variables <- cur_stmt_in;
+            stmt.stmt_out_variables <- cur_stmt_out;
             (cur_stmt_in, is_new_change || is_in_changed)
           ) (block_out_variables, false)
           (List.rev block_stmts)
@@ -411,13 +423,20 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       basic_blocks_map
   in
     
-  let basic_blocks_map = derive_basic_blocks stmts in
+  let e_stmts = ir3stmts_to_enhanced_stmts stmts in
+  let basic_blocks_map = derive_basic_blocks e_stmts in
   let calculated_blocks_map = calculate_in_out_variables basic_blocks_map in
 
   println "";
   println "";
   println "";
-  print_basic_blocks_map (calculated_blocks_map);
+  print_basic_blocks_map calculated_blocks_map;
+
+  let all_blocks = get_all_blocks basic_blocks_map in
+  let all_stmts = get_all_stmts all_blocks in
+  let sorted_all_stmts = List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts in
+
+  println (string_of_list sorted_all_stmts string_of_enhanced_stmt "\n");
 
   [("", (0,0))]
 end
@@ -633,18 +652,36 @@ let rec ir3_exp_to_arm
       | AritmeticOp aop ->
         begin
           let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
-          let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match aop with
           | "+" ->
-            let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+            begin
+              match idc2 with
+              | IntLiteral3 i ->
+                let instr = ADD("", false, dstreg, op1reg, ImmedOp("# " ^ string_of_int i)) in
+                (dstreg, op1instr @ dstinstr @ [instr], [])
+              | Var3 _ ->
+                let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
+                let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
+                (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+              | _ -> failwith ("Arithmetic operand not supported")
+            end
           | "*" ->
+            let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
-            let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+            begin
+              match idc2 with
+              | IntLiteral3 i ->
+                let instr = SUB("", false, dstreg, op1reg, ImmedOp("# " ^ string_of_int i)) in
+                (dstreg, op1instr @ dstinstr @ [instr], [])
+              | Var3 _ ->
+                let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
+                let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
+                (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+              | _ -> failwith ("Aritmetic operand not supported")
+            end
           | _ -> failwith ("Arithmetic operand not supported")
         end
       | _ -> failwith ("Not operand of binary exp")
@@ -689,27 +726,18 @@ let rec ir3_exp_to_arm
       (* TODO: Replace with the address of string later *)
       | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
       (* TODO: Spill and allocate to register *)
-      | Var3 id3 ->
-        begin
-          let mov_arg_to_reg = load_variable stack_frame dst id3 in
-          let curr_reg_var = var_in_register rallocs dst in
-          match curr_reg_var with
-          | Some v ->
-            if v <> id3 then
-              begin
-                store_variable stack_frame dst v @ mov_arg_to_reg
-              end
-            else []
-          | None -> mov_arg_to_reg
-        end
+      | Var3 id3 -> [MOV("", false, dst, ImmedOp("#" ^ id3))]
+      (* TODO: Add information about arguments to table here if needed *)
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
       begin
         match idc with
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
+        (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt id3 false in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
+          (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
@@ -731,11 +759,9 @@ let rec ir3_exp_to_arm
         first_four_args @ rest_args
       end
     in
+    let actual_call = BL("", m_id) in
     let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args), [caller_load])
-    (* Manage caller registers *)
-    (* Manage arguments!! *)
-    (* Get return value from a1 *)
+    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call], [caller_load])
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
@@ -802,7 +828,7 @@ let ir3_stmt_to_arm
   (* 1 *)
   | AssignDeclStmt3 _ -> failwith ("AssignDeclStmt3: STATEMENT NOT IMPLEMENTED")
   (* 2 *)
-  | AssignFieldStmt3 _ -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED")
+  | AssignFieldStmt3 (fla, exp) -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED") 
   (* 3 *)
   | MdCallStmt3 exp ->
     let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
@@ -818,14 +844,28 @@ let ir3_stmt_to_arm
     [B("", return_label)]
 
 let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) = [
-  EMPTY;
-  COM ("Funcion: " ^ mthd.id3);
-  EMPTY;
-]
+    EMPTY;
+    COM ("Funcion " ^ mthd.id3);
+    COM "Local variable offsets:";
+  ]
+  @ List.map (fun (id,off) -> COM ("  " ^ id ^ " : " ^ (string_of_int off))) stack_frame
+  @ [EMPTY]
 
 let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
+  let rallocs = [
+    "a1", ref None;
+    "a2", ref None;
+    "a3", ref None;
+    "a4", ref None;
+    "v1", ref None;
+    "v2", ref None;
+    "v3", ref None;
+    "v4", ref None;
+    "v5", ref None;
+    (* TODO: use other registers for variables? *)
+  ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
   let callee_save = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
@@ -844,23 +884,27 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
   let type_layouts = List.map (derive_layout clist) clist in
   let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
   let md_comments = gen_md_comments mthd stack_frame in
-  method_prefix @ md_comments @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
+  begin
+    (* Telling function that some arguments are on registers *)
+    let args = mthd.params3 in
+    let args_length = List.length args in
+    let nth_var = List.nth rallocs in
+    let set_nth_var n =
+      let (r, v) = (nth_var n) in
+      let (v_type, v_name) = List.nth mthd.params3 n in
+      v := Some v_name
+    in
+    let rec set_nth_below n curr =
+      if (curr < n) then (set_nth_var curr; set_nth_below n (curr+1))
+      else ()
+    in
+    let mthd_instr = method_prefix @ md_comments @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
+    (set_nth_below args_length (args_length-1); mthd_instr)
+  end
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   add_ir3_program_to_string_table (classes, main_method, methods);
-  let rallocs = [
-    "a1", ref None;
-    "a2", ref None;
-    "a3", ref None;
-    "a4", ref None;
-    "v1", ref None;
-    "v2", ref None;
-    "v3", ref None;
-    "v4", ref None;
-    "v5", ref None;
-    (* TODO: use other registers for variables? *)
-  ] in
-  let ir3_method_partial = ir3_method_to_arm classes rallocs in
+  let ir3_method_partial = ir3_method_to_arm classes in
   let dataSegment = PseudoInstr ".data" in
   let string_table_to_arm = Hashtbl.fold 
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
