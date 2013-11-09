@@ -657,11 +657,9 @@ let rec ir3_exp_to_arm
         first_four_args @ rest_args
       end
     in
+    let actual_call = BL("", m_id) in
     let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args), [caller_load])
-    (* Manage caller registers *)
-    (* Manage arguments!! *)
-    (* Get return value from a1 *)
+    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call], [caller_load])
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
@@ -753,7 +751,23 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
   let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
   let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
-  method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
+  begin
+    (* Telling function that some arguments are on registers *)
+    let args = mthd.params3 in
+    let args_length = List.length args in
+    let nth_var = List.nth rallocs in
+    let set_nth_var n =
+      let (r, v) = (nth_var n) in
+      let (v_type, v_name) = List.nth mthd.params3 n in
+      v := Some v_name
+    in
+    let rec set_nth_below n curr =
+      if (curr < n) then (set_nth_var curr; set_nth_below n (curr+1))
+      else ()
+    in
+    let mthd_instr = method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
+    (set_nth_below args_length (args_length-1); mthd_instr)
+  end
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   add_ir3_program_to_string_table (classes, main_method, methods);
