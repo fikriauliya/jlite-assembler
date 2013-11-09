@@ -24,11 +24,26 @@ let println line = begin
   printf "%s\n" line;
 end
 
+(*
+ * Calculate size of a variable.
+ * Each variable occupies 4 bytes.
+*)
+let calc_var_size ((v_type, _): var_decl3) (clist: (cdata3 list)) =
+  match v_type with
+  | IntT | BoolT | StringT -> 4
+  | ObjectT cname ->
+    begin
+      let cdata = List.find (fun ((cn, _): cdata3) -> cn = cname) clist in
+      let (_, vars) = cdata in
+      4 * (List.length vars)
+    end
+  | _ -> failwith ("calc_object_size: This shouldn't happen")
+
 (* Returns the relative position of a field data in an object of a given type
   TODO
   TODO also take the class as an argument
 *)
-let get_field_shift (field_name:id3) = 0
+let get_field_shift (field_name: id3) (cdata: cdata3) = 0
 
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
   let basic_blocks_map = Hashtbl.create 100 in
@@ -132,7 +147,9 @@ let ir3_idc3_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_ty
   | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), [] (*TODO: replace this stub*)
   | StringLiteral3 s ->  "#" ^ s, [] (*TODO: replace this stub*)
 
-let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_type) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list)) =
+let rec ir3_exp_to_arm 
+    (localvars: var_decl3 list) (asvs: active_spill_variables_type) (sm: stack_memory_map_type)
+    (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list)) =
   match exp with
   | Idc3Expr (idc) -> ir3_idc3_to_arm asvs sm stmts currstmt idc
   (* 3 *)
@@ -225,7 +242,7 @@ let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map
   | FieldAccess3 (var_id3, field_name_id3) -> (*failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)*)
     let (var_reg, var_instr) = ir3_id3_to_arm asvs sm stmts currstmt var_id3 in
     let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
-    let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_shift field_name_id3, false))
+    let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_shift field_name_id3 (* DUMMY FOR COMPILATION *) ("DUMMY", []), false))
       (* TODO: handle non-word fields; *)
       (* TODO: how to get the variable type? *)
     in dstreg, var_instr @ dstinstr @ [ldr_instr]
@@ -235,10 +252,10 @@ let rec ir3_exp_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map
   | ObjectCreate3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
 
 let ir3_stmt_to_arm
-    (asvs: active_spill_variables_type) (sm: stack_memory_map_type)
-    (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
+    (localvars: var_decl3 list) (asvs: active_spill_variables_type)
+    (sm: stack_memory_map_type) (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
   let ir3_id3_partial = ir3_id3_to_arm asvs sm stmts in
-  let ir3_exp_partial = ir3_exp_to_arm asvs sm stmts in
+  let ir3_exp_partial = ir3_exp_to_arm localvars asvs sm stmts in
   match stmt with
   (* 1 *)
   | Label3 label ->
@@ -275,12 +292,14 @@ let ir3_stmt_to_arm
   (* 1 *)
   | ReturnVoidStmt3 -> failwith ("ReturnVoidStmt3 STATEMENT NOT IMPLEMENTED")
 
-let ir3_method_to_arm (mthd: md_decl3): (arm_instr list) =
+let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   let asvs = derive_active_spill_variable_set liveness_timeline in
-  let sm = derive_stack_memory_map mthd.params3 mthd.localvars3 in
-  let ir3_stmt_partial = ir3_stmt_to_arm asvs sm mthd.ir3stmts in
+  let localvars = mthd.localvars3 in
+  let sm = derive_stack_memory_map mthd.params3 localvars in
+  let ir3_stmt_partial = ir3_stmt_to_arm localvars asvs sm mthd.ir3stmts in
   List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
-  List.flatten (List.map ir3_method_to_arm (main_method :: methods))
+  let ir3_method_partial = ir3_method_to_arm classes in
+  List.flatten (List.map ir3_method_partial (main_method :: methods))
