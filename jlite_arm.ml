@@ -545,7 +545,7 @@ let spill_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3) (ra
 
 let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
   let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = dst_reg) rallocs in
-  let _ = (var_option := None) in
+  let _ = (var_option := Some var_name) in
   load_variable stack_frame dst_reg var_name
 
 (* 5 
@@ -600,7 +600,7 @@ let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
       let spilled_reg, spilled_var_ref = pick_spill_reg() in
       let spilled_var = match !spilled_var_ref with Some v -> v | _ -> failwith "unexpected quirk" in
       let store_instrs = store_variable stack_frame spilled_reg spilled_var in
-      let () = spilled_var_ref := None in
+      let () = spilled_var_ref := Some var_id in
       
       spilled_reg,
         store_instrs
@@ -888,18 +888,18 @@ let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
   @ [EMPTY]
 
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
-  (*let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in*)
+  let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
   let rallocs = [
     "a1", ref None;
     "a2", ref None;
     "a3", ref None;
-(*    "a4", ref None;
+    "a4", ref None;
     "v1", ref None;
     "v2", ref None;
     "v3", ref None;
     "v4", ref None;
-    "v5", ref None;*)
+    "v5", ref None;
     (* TODO: use other registers for variables? *)
   ] in
   let localvars = mthd.localvars3 in
