@@ -275,7 +275,6 @@ end
 let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type) =
   ([], [])
 
-
 (* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
 let derive_precise_layout (clist: cdata3 list) ((cname,decls): cdata3)
     (starting_offset: int) (ascending_order: bool): cname3 * type_layout =
@@ -370,8 +369,7 @@ let rec cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
 let rec ir3_exp_to_arm 
     (localvars: var_decl3 list) (rallocs: reg_allocations)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
-    (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list)) =
-  
+    (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list) * (arm_instr list)) = 
   let get_assigned_register stmt = match stmt with
   | AssignStmt3(id,_)
   | AssignDeclStmt3(_,id,_)
@@ -379,7 +377,9 @@ let rec ir3_exp_to_arm
   | _ -> failwith "Tried to retrieve the assigned register from a non-assignment statement"
   
   in match exp with
-  | Idc3Expr (idc) -> ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc
+  | Idc3Expr (idc) ->
+    let (reg, instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc in
+    (reg, instr, [])
   (* 3 *)
   | BinaryExp3 (op, idc1, idc2) ->
     begin
@@ -392,10 +392,10 @@ let rec ir3_exp_to_arm
           match bop with
           | "||" ->
             let instr = ORR("", false, dstreg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "&&" ->
             let instr = AND("", false, dstreg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Boolean operand not supported")
         end
       | RelationalOp rop ->
@@ -407,7 +407,7 @@ let rec ir3_exp_to_arm
             let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
             let mveqinstr = MOV(movcond1, false, op1reg, ImmedOp("#1")) in
             let mvneinstr = MOV(movcond2, false, op1reg, ImmedOp("#0")) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr]) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr], []) in
           match rop with
           | "==" ->
             begin
@@ -416,7 +416,7 @@ let rec ir3_exp_to_arm
               let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
               let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
               let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
-              (op1reg, op1instr @ op2instr @ [eqinstr])
+              (op1reg, op1instr @ op2instr @ [eqinstr], [])
             | _ ->  
               relationalOpHelper "eq" "ne"
             end
@@ -440,13 +440,13 @@ let rec ir3_exp_to_arm
           match aop with
           | "+" ->
             let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "*" ->
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr]) 
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
             let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr]) 
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Arithmetic operand not supported")
         end
       | _ -> failwith ("Not operand of binary exp")
@@ -464,10 +464,10 @@ let rec ir3_exp_to_arm
             let cmpfalseinstr = CMP("", op1reg, ImmedOp("#0")) in
             let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#0")) in
             let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#1")) in
-            (dstreg, op1instr @ dstinstr @ [cmpfalseinstr; mveqinstr; mvneinstr])
+            (dstreg, op1instr @ dstinstr @ [cmpfalseinstr; mveqinstr; mvneinstr], [])
           | "-" ->
             let revsubinstr = RSB("", false, dstreg, op1reg, ImmedOp("#0")) in
-            (dstreg, op1instr @ dstinstr @ [revsubinstr])
+            (dstreg, op1instr @ dstinstr @ [revsubinstr], [])
           | _ -> failwith ("Unary operator not supported")
         end
       | _ -> failwith ("Operator not supported")
@@ -480,7 +480,7 @@ let rec ir3_exp_to_arm
     let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name_id3, false))
       (* TODO: handle non-word fields; *)
       (* TODO: how to get the variable type? *)
-    in dstreg, var_instr @ dstinstr @ [ldr_instr]
+    in (dstreg, var_instr @ dstinstr @ [ldr_instr], [])
   (* 5 *)
   | MdCall3 (m_id, args) ->
     let mdargs_to_reg (idc: idc3) (dst: reg): (arm_instr list) = 
@@ -519,7 +519,7 @@ let rec ir3_exp_to_arm
     let args_space = 4 * (List.length args) in
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (args_space))) in
     let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("v1", caller_save :: allocate_args_stack :: [caller_load])
+    ("a1", caller_save :: [allocate_args_stack], [caller_load])
     (* Manage caller registers *)
     (* Manage arguments!! *)
     (* Get return value from a1 *)
@@ -540,9 +540,9 @@ let ir3_stmt_to_arm
   (* 3 *)
   | IfStmt3 (exp, label) ->
     (* TODO: complete the implementation *)
-    let (exp_reg, exp_instr) = ir3_exp_partial stmt exp in
+    let (exp_reg, exp_instr, post_instr) = ir3_exp_partial stmt exp in
     let if_result = B("eq", string_of_int(label)) in
-    exp_instr @ [if_result]
+    exp_instr @ [if_result] @ post_instr
   (* 1 *)
   | GoTo3 label -> 
     let goto_result = B("", (string_of_int label)) in
@@ -554,17 +554,17 @@ let ir3_stmt_to_arm
   (* 2 *)
   | AssignStmt3 (id, exp) ->
     let (id_reg_dst, id_instr) = ir3_id3_partial stmt id in
-    let (exp_reg_dst, exp_instr) = ir3_exp_partial stmt exp in
+    let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
     let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
-    id_instr @ exp_instr @ [move_result]
+    id_instr @ exp_instr @ [move_result] @ post_instr
   (* 1 *)
   | AssignDeclStmt3 _ -> failwith ("AssignDeclStmt3: STATEMENT NOT IMPLEMENTED")
   (* 2 *)
   | AssignFieldStmt3 _ -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED")
   (* 3 *)
   | MdCallStmt3 exp ->
-    let (exp_reg_dst, exp_instr) = ir3_exp_partial stmt exp in
-    exp_instr
+    let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
+    exp_instr @ post_instr
   (* 1 *)
   | ReturnStmt3 id ->
     (* Use register allocator's method to force a1 later *)
