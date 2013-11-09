@@ -161,7 +161,14 @@ let ir3_idc3_to_arm (asvs: active_spill_variables_type) (sm: stack_memory_map_ty
 let rec ir3_exp_to_arm 
     (localvars: var_decl3 list) (asvs: active_spill_variables_type) (sm: stack_memory_map_type)
     (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list)) =
-  match exp with
+  
+  let get_assigned_register stmt = match stmt with
+  | AssignStmt3(id,_)
+  | AssignDeclStmt3(_,id,_)
+    -> ir3_id3_to_arm asvs sm stmts currstmt id
+  | _ -> failwith "Tried to retrieve the assigned register from a non-assignment statement"
+  
+  in match exp with
   | Idc3Expr (idc) -> ir3_idc3_to_arm asvs sm stmts currstmt idc
   (* 3 *)
   | BinaryExp3 (op, idc1, idc2) ->
@@ -252,7 +259,7 @@ let rec ir3_exp_to_arm
   (* 4 *)
   | FieldAccess3 (var_id3, field_name_id3) -> (*failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)*)
     let (var_reg, var_instr) = ir3_id3_to_arm asvs sm stmts currstmt var_id3 in
-    let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
+    let (dstreg, dstinstr) = get_assigned_register currstmt in
     let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_shift field_name_id3 (* DUMMY FOR COMPILATION *) ("DUMMY", []), false))
       (* TODO: handle non-word fields; *)
       (* TODO: how to get the variable type? *)
