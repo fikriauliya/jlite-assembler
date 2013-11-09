@@ -2,8 +2,10 @@ class Simple {
 	void main () {
 		Int v;
 		A a;
+		//Bool b;
 		v = 1  + 2 + 3;
 		v = a.x;
+		//if (b==false) {println("ok");} else {println("nok");}
 	}
 }
 
