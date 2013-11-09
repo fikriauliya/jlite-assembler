@@ -18,6 +18,12 @@ module Id3Set = Set.Make(
 type memory_address_offset = int
 
 type liveness_timeline_type = ((id3 * (int * int)) list)
+type liveness_timeline_record = {
+  variable_name: id3;
+  mutable start_line: int;
+  mutable end_line: int;  
+}
+
 (*
 type active_spill_variables_type = 
   (* (active variable set, spill variable set) *)
@@ -176,6 +182,8 @@ let calc_obj_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
   | _ -> failwith ("calc_object_size: This shouldn't happen")
 
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
+  let liveness_timeline_map = Hashtbl.create 100 in
+
   let ir3stmts_to_enhanced_stmts (stmts) = 
     let get_uses_from_ir3exp(e: ir3_exp): (id3 list) = 
       let get_uses_from_idc3 (idc3_val : idc3) = 
@@ -232,8 +240,8 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     (string_of_ir3_stmt e_stmt.embedded_stmt) ^ " | defs = [ " ^ 
     (string_of_list (Id3Set.elements e_stmt.defs) (fun x -> x) ", ") ^ "] | uses = [ " ^ 
     (string_of_list (Id3Set.elements e_stmt.uses) (fun x -> x) ", ") ^ "] | ins = [ " ^
-    (string_of_list (Id3Set.elements e_stmt.stmt_out_variables) (fun x -> x) ", ") ^ "] | outs = [ " ^
-    (string_of_list (Id3Set.elements e_stmt.stmt_in_variables) (fun x -> x) ", ") ^ "]";
+    (string_of_list (Id3Set.elements e_stmt.stmt_in_variables) (fun x -> x) ", ") ^ "] | outs = [ " ^
+    (string_of_list (Id3Set.elements e_stmt.stmt_out_variables) (fun x -> x) ", ") ^ "]";
   in
   let print_basic_blocks_map basic_blocks_map =
     Hashtbl.iter (fun k (v:basic_block_type) ->
@@ -435,8 +443,36 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   let all_blocks = get_all_blocks basic_blocks_map in
   let all_stmts = get_all_stmts all_blocks in
   let sorted_all_stmts = List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts in
+  
+  let e = List.fold_left (fun prev curr ->
+    let diff = Id3Set.diff curr.stmt_in_variables prev.stmt_in_variables in
+
+    println (string_of_enhanced_stmt curr);
+    Id3Set.iter (fun x -> 
+      println ("add: " ^ x);
+      Hashtbl.add liveness_timeline_map x 
+        {
+          variable_name = x;
+          start_line = curr.line_number;
+          end_line = curr.line_number;
+        }
+    ) diff;
+
+    let diff2 = Id3Set.diff prev.stmt_in_variables curr.stmt_in_variables in
+    Id3Set.iter (fun x -> 
+      println x;
+      let ht = Hashtbl.find liveness_timeline_map x in
+      ht.end_line <- curr.line_number;
+    ) diff2;
+    curr
+  ) (List.hd sorted_all_stmts) sorted_all_stmts in
 
   println (string_of_list sorted_all_stmts string_of_enhanced_stmt "\n");
+  Hashtbl.iter (fun k v -> 
+    println (k);
+    println ("start_line: " ^ (string_of_int v.start_line) ^ ", " ^ "end_line: " ^ (string_of_int v.end_line));
+  ) liveness_timeline_map;
+
 
   [("", (0,0))]
 end
