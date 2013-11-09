@@ -616,18 +616,27 @@ let rec ir3_exp_to_arm
       (* TODO: Replace with the address of string later *)
       | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
       (* TODO: Spill and allocate to register *)
-      | Var3 id3 -> [MOV("", false, dst, ImmedOp("#" ^ id3))]
-      (* TODO: Add information about arguments to table here if needed *)
+      | Var3 id3 ->
+        begin
+          let mov_arg_to_reg = load_variable stack_frame dst id3 in
+          let curr_reg_var = var_in_register rallocs dst in
+          match curr_reg_var with
+          | Some v ->
+            if v <> id3 then
+              begin
+                store_variable stack_frame dst v @ mov_arg_to_reg
+              end
+            else []
+          | None -> mov_arg_to_reg
+        end
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
       begin
         match idc with
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
-        (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt id3 in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
-          (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
@@ -732,21 +741,9 @@ let ir3_stmt_to_arm
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
-let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
+let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
-  let rallocs = [
-    "a1", ref None;
-    "a2", ref None;
-    "a3", ref None;
-    "a4", ref None;
-    "v1", ref None;
-    "v2", ref None;
-    "v3", ref None;
-    "v4", ref None;
-    "v5", ref None;
-    (* TODO: use other registers for variables? *)
-  ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
   let callee_save = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
@@ -768,7 +765,19 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   add_ir3_program_to_string_table (classes, main_method, methods);
-  let ir3_method_partial = ir3_method_to_arm classes in
+  let rallocs = [
+    "a1", ref None;
+    "a2", ref None;
+    "a3", ref None;
+    "a4", ref None;
+    "v1", ref None;
+    "v2", ref None;
+    "v3", ref None;
+    "v4", ref None;
+    "v5", ref None;
+    (* TODO: use other registers for variables? *)
+  ] in
+  let ir3_method_partial = ir3_method_to_arm classes rallocs in
   let dataSegment = PseudoInstr ".data" in
   let string_table_to_arm = Hashtbl.fold 
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
