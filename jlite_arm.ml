@@ -186,10 +186,11 @@ let rec ir3_exp_to_arm
           let relationalOpHelper (movcond1: string) (movcond2: string) =
             let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
             let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+            let (dstreg, dstinstr) = get_assigned_register currstmt in
             let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
             let mveqinstr = MOV(movcond1, false, op1reg, ImmedOp("#1")) in
             let mvneinstr = MOV(movcond2, false, op1reg, ImmedOp("#0")) in
-            (op1reg, op1instr @ op2instr @ [eqinstr; mveqinstr; mvneinstr]) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr]) in
           match rop with
           | "==" ->
             begin
