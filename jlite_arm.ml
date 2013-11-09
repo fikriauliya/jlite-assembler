@@ -42,10 +42,17 @@ let fresh_label () =
   (labelcount := !labelcount+1; "L" ^ (string_of_int !labelcount))
 
 (*
- * Calculate size of a variable.
- * Each variable occupies 4 bytes.
+ * Calculate the size of a variable. In fact, every variable has size 4 :)
 *)
-let calc_var_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
+let calc_var_size (clist: (cdata3 list)) ((v_type, _): var_decl3) = 4
+
+(*
+ * Calculate the size of an object.
+ * Each variable occupies 4 bytes.
+ * Note: this does not correspond to the size of the variable the object is stored in,
+ * since objects are only stored by reference (pointer).
+*)
+let calc_obj_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
   match v_type with
   | IntT | BoolT | StringT -> 4
   | ObjectT cname ->
@@ -182,8 +189,15 @@ let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type)
 let derive_stack_frame (params: (var_decl3 list)) (localvars: (var_decl3 list)): type_layout =
   ([])
 
-let derive_layout ((cname,decls): cdata3): cname3 * type_layout =
-  cname, List.map (fun (t,id) -> id, 0) decls
+(* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
+let derive_layout (clist: cdata3 list) ((cname,decls): cdata3): cname3 * type_layout =
+  let offset = ref 0 in
+  cname, List.map (fun (t,id) -> id,
+    let off = !offset in
+    begin
+      offset := !offset + (calc_var_size clist (t,id));
+      off
+    end) decls
 
 (* Returns the relative position of a field in an object of a given type
   TODO
@@ -407,7 +421,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let method_suffix = [exit_label_instr; restore_sp; callee_load] in
   (* Callee stack & register management END *)
   let stack_frame = derive_stack_frame mthd.params3 localvars in
-  let type_layouts = List.map derive_layout clist in
+  let type_layouts = List.map (derive_layout clist) clist in
   let ir3_stmt_partial = ir3_stmt_to_arm localvars asvs exit_label_str stack_frame type_layouts mthd.ir3stmts in
   method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
 

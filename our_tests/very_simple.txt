@@ -4,7 +4,7 @@ class Simple {
 		A a;
 		//Bool b;
 		v = 1  + 2 + 3;
-		v = a.x;
+		v = a.y;
 		//if (b==false) {println("ok");} else {println("nok");}
 	}
 }
