@@ -212,15 +212,14 @@ let rec jlitestmts_to_IR3Stmts
          @[Label3 endlabel]
         )
       | WhileStmt (e, stmts) -> 
-        let negatedexp = 
-          TypedExp (UnaryExp (UnaryOp "!",e), BoolT) in
         let (expr3,exprvars,exprstmts) = 
-          (jliteexpr_to_IR3Expr classid negatedexp false false) in
+          (jliteexpr_to_IR3Expr classid e true false) in
+        let negatedExp = (negate_relational_exp expr3) in
         let (vars,stmst) = 
           (jlitestmts_to_IR3Stmts classid mthd stmts) in 
         let looplabel = fresh_label() in
         let endlabel =  fresh_label() in
-        let ifIR3 = (IfStmt3 (expr3, endlabel)) in
+        let ifIR3 = (IfStmt3 (negatedExp, endlabel)) in
         let gotoLoopIR3 = (GoTo3 looplabel) in 
         (exprvars@vars,
          (Label3 looplabel::exprstmts)@(ifIR3::stmst)
