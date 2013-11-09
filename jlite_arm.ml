@@ -60,7 +60,8 @@ type basic_block_type = {
 }
 
 let println line = begin
-  printf "%s\n" line;
+  (*printf "%s\n" line;*)
+  (* TODO: remove all the printl's cluttering the code *)
 end
 
 let id3_set_of_list li = 
@@ -477,8 +478,10 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   [("", (0,0))]
 end
 
+(* TODO rm
 let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type) =
   ([], [])
+*)
 
 (* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
 let derive_precise_layout (clist: cdata3 list) ((cname,decls): cdata3)
@@ -554,7 +557,7 @@ let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) 
 *)
 
 (* 4 *)
-let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
+let ir3_id3_to_arm  (line: int) (rallocs: reg_allocations) (stack_frame: type_layout)
   (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3) (*(no_spill_vars: id3 list)*)
   (write_only: bool)
   : reg * arm_instr list =
@@ -613,9 +616,10 @@ let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
   | None -> allocate_var vid
 
 (* 2 *)
-let ir3_idc3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3): (reg * (arm_instr list)) =
+let ir3_idc3_to_arm (line: int) (rallocs: reg_allocations) (stack_frame: type_layout)
+    (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3): (reg * (arm_instr list)) =
   match vidc3 with
-  | Var3 vid -> ir3_id3_to_arm rallocs stack_frame stmts currstmt vid false
+  | Var3 vid -> ir3_id3_to_arm line rallocs stack_frame stmts currstmt vid false
   | IntLiteral3 i ->  "#" ^ (string_of_int i), [] (*TODO: replace this stub*)
   | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), [] (*TODO: replace this stub*)
   | StringLiteral3 s ->  "#" ^ s, [] (*TODO: replace this stub*)
@@ -628,7 +632,7 @@ let rec cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
 
-let rec ir3_exp_to_arm 
+let rec ir3_exp_to_arm  (line: int) 
     (clist: cdata3 list) (localvars: var_decl3 list) (rallocs: reg_allocations)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
     (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list) * (arm_instr list)) = 
@@ -636,12 +640,12 @@ let rec ir3_exp_to_arm
   let get_assigned_register stmt = match stmt with
   | AssignStmt3(id,_)
   | AssignDeclStmt3(_,id,_)
-    -> ir3_id3_to_arm rallocs stack_frame stmts currstmt id true
+    -> ir3_id3_to_arm line rallocs stack_frame stmts currstmt id true
   | _ -> failwith "Tried to retrieve the assigned register from a non-assignment statement"
   
   in match exp with
   | Idc3Expr (idc) ->
-    let (reg, instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc in
+    let (reg, instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc in
     (reg, instr, [])
   (* 3 *)
   | BinaryExp3 (op, idc1, idc2) ->
@@ -649,8 +653,8 @@ let rec ir3_exp_to_arm
       match op with
       | BooleanOp bop ->
         begin
-          let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
-          let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
+          let (op1reg, op1instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc1 in
+          let (op2reg, op2instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc2 in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match bop with
           | "||" ->
@@ -664,8 +668,8 @@ let rec ir3_exp_to_arm
       | RelationalOp rop ->
         begin
           let relationalOpHelper (movcond1: string) (movcond2: string) =
-            let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
-            let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
+            let (op1reg, op1instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc1 in
+            let (op2reg, op2instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc2 in
             let (dstreg, dstinstr) = get_assigned_register currstmt in
             let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
             let mveqinstr = MOV(movcond1, false, op1reg, ImmedOp("#1")) in
@@ -676,8 +680,8 @@ let rec ir3_exp_to_arm
             begin
             match idc2 with
             | BoolLiteral3 _ ->
-              let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
-              let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
+              let (op1reg, op1instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc1 in
+              let (op2reg, op2instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc2 in
               let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
               (op1reg, op1instr @ op2instr @ [eqinstr], [])
             | _ ->  
@@ -697,8 +701,8 @@ let rec ir3_exp_to_arm
         end
       | AritmeticOp aop ->
         begin
-          let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
-          let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
+          let (op1reg, op1instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc1 in
+          let (op2reg, op2instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc2 in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match aop with
           | "+" ->
@@ -720,7 +724,7 @@ let rec ir3_exp_to_arm
       match op with
       | UnaryOp op ->
         begin
-          let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc in
+          let (op1reg, op1instr) = ir3_idc3_to_arm line rallocs stack_frame stmts currstmt idc in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match op with
           | "!" ->
@@ -737,7 +741,7 @@ let rec ir3_exp_to_arm
     end
   (* 4 *)
   | FieldAccess3 (var_id3, field_name_id3) -> (*failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)*)
-    let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt var_id3 false in
+    let (var_reg, var_instr) = ir3_id3_to_arm line rallocs stack_frame stmts currstmt var_id3 false in
     let (dstreg, dstinstr) = get_assigned_register currstmt in
     let cname = cname_from_id3 localvars var_id3 in
     let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name_id3, false))
@@ -771,7 +775,7 @@ let rec ir3_exp_to_arm
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
         (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
-          let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt id3 false in
+          let (var_reg, var_instr) = ir3_id3_to_arm line rallocs stack_frame stmts currstmt id3 false in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
           (* TODO: Add information about arguments to table here if needed *)
       end
@@ -805,12 +809,12 @@ let rec ir3_exp_to_arm
     let blinstr = BL("","_Znwj(PLT)") in
     ("a1", [movinstr; blinstr], [])
 
-let ir3_stmt_to_arm
+let ir3_stmt_to_arm (line: int)
     (clist: cdata3 list) (localvars: var_decl3 list) (rallocs: reg_allocations) (return_label: label)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
     (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
-  let ir3_id3_partial = ir3_id3_to_arm rallocs stack_frame stmts in
-  let ir3_exp_partial = ir3_exp_to_arm clist localvars rallocs stack_frame type_layouts stmts in
+  let ir3_id3_partial = ir3_id3_to_arm line rallocs stack_frame stmts in
+  let ir3_exp_partial = ir3_exp_to_arm line clist localvars rallocs stack_frame type_layouts stmts in
   match stmt with
   (* 1 *)
   | Label3 label ->
@@ -845,7 +849,7 @@ let ir3_stmt_to_arm
         [ldrinstr; movinstr; blinstr]
       | Var3 id3 ->
         let label = Hashtbl.find string_table "%i" in
-        let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts stmt id3 false in
+        let (var_reg, var_instr) = ir3_id3_to_arm line rallocs stack_frame stmts stmt id3 false in
         let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
         let movinstr = MOV("",false,"a2",RegOp(var_reg)) in
         let blinstr = BL("","printf(PLT)") in
@@ -872,7 +876,7 @@ let ir3_stmt_to_arm
   (* 1 *)
   | ReturnStmt3 id ->
     (* Use register allocator's method to force a1 later *)
-    let (return_reg, return_instr) = ir3_id3_to_arm rallocs stack_frame stmts stmt id false in
+    let (return_reg, return_instr) = ir3_id3_to_arm line rallocs stack_frame stmts stmt id false in
     let move_result = MOV("", false, "a1", RegOp(return_reg)) in
     return_instr @ [move_result; B("", return_label)]
   (* 1 *)
@@ -919,7 +923,9 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (* Callee stack & register management END *)
   let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
-  let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
+  let current_line = ref 0 in
+  let get_next_line() = let () = current_line := !current_line + 1 in !current_line in
+  let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
   let md_comments = gen_md_comments mthd stack_frame in
   begin
     (* Telling this function that some arguments are on registers *)
@@ -933,7 +939,9 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
       if (curr < n) then (set_nth_var curr; set_nth_below n (curr+1))
       else ()
     in
-    let mthd_instr = method_header @ md_comments @ method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
+    let mthd_instr = method_header @ md_comments @ method_prefix
+      @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
+      @ method_suffix in
     (set_nth_below (min (List.length mthd.params3) 4) 0; mthd_instr)
   end
 
