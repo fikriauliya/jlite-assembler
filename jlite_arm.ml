@@ -588,7 +588,21 @@ let ir3_id3_to_arm  (line: int) (rallocs: reg_allocations) (stack_frame: type_la
     else load_variable stack_frame regn varn
   in
   
+  let is_alive v = 
+    true
+  in
+  
+  let clean_registers() =
+    List.map (fun (regn,varn) -> match !varn with
+      | Some v if not is_alive v then
+          varn := None
+        else ()
+      | None -> ()
+    ) rallocs
+  in
+  
   let allocate_var var_id: (reg * (arm_instr list)) =
+    let () = clean_registers() in
     let free (regn,varn) = match !varn with None -> true | Some _ -> false in
     if List.exists free rallocs then
       let (regn,varn) = List.find free rallocs in
