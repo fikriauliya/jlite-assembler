@@ -650,36 +650,18 @@ let rec ir3_exp_to_arm
       | AritmeticOp aop ->
         begin
           let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
+          let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match aop with
           | "+" ->
-            begin
-              match idc2 with
-              | IntLiteral3 i ->
-                let instr = ADD("", false, dstreg, op1reg, ImmedOp("# " ^ string_of_int i)) in
-                (dstreg, op1instr @ dstinstr @ [instr], [])
-              | Var3 _ ->
-                let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
-                let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
-                (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
-              | _ -> failwith ("Arithmetic operand not supported")
-            end
+            let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "*" ->
-            let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
-            begin
-              match idc2 with
-              | IntLiteral3 i ->
-                let instr = SUB("", false, dstreg, op1reg, ImmedOp("# " ^ string_of_int i)) in
-                (dstreg, op1instr @ dstinstr @ [instr], [])
-              | Var3 _ ->
-                let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
-                let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
-                (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
-              | _ -> failwith ("Aritmetic operand not supported")
-            end
+            let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Arithmetic operand not supported")
         end
       | _ -> failwith ("Not operand of binary exp")
