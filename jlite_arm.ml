@@ -397,7 +397,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             in
             
             stmt.stmt_in_variables <- cur_stmt_in;
-            (cur_stmt_in, is_new_change)
+            (cur_stmt_in, is_new_change || is_in_changed)
           ) (block_out_variables, false)
           (List.rev block_stmts)
         in
