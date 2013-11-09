@@ -19,7 +19,6 @@ type active_spill_variables_type =
 
 type reg_allocations = (reg * id3 option ref) list
 
-
 (* variable name -> reserved memory address in stack
 type stack_memory_map_type =
   ((id3 * memory_address_type) list)
@@ -132,6 +131,9 @@ let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_progra
         helper stmts'
     end      
   in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
+
+let var_in_register (rallocs: reg_allocations) (r: reg): (id3 option) =
+  let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
 
 (*
  * Calculate the size of a variable. In fact, every variable has size 4 :)
@@ -580,25 +582,31 @@ let rec ir3_exp_to_arm
         (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt id3 in
-          var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", arg_index*4, false))]
+          var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
           (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
       if (List.length args) <= arg_index then []
-      else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int arg_index) :: (prepare_reg_args (arg_index + 1) args)
+      else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int (arg_index+1)) @ (prepare_reg_args (arg_index + 1) args)
     in
     let rec prepare_stack_args arg_index args =
       if (List.length args) <= arg_index then []
       (* Push arguments with reverse order.
        * Change if stack frame layout for parameter is changed. *)
-      else (prepare_stack_args (arg_index + 1) args) @ [mdargs_to_stack (List.nth args arg_index) arg_index]
+      else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index)
     in
     let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
-    let args_space = 4 * (List.length args) in
-    let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (args_space))) in
+    let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
+    let prepare_args args = 
+      begin
+        let first_four_args = prepare_reg_args 0 args in
+        let rest_args = prepare_stack_args 4 args in
+        first_four_args @ rest_args
+      end
+    in
     let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("a1", caller_save :: [allocate_args_stack], [caller_load])
+    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args), [caller_load])
     (* Manage caller registers *)
     (* Manage arguments!! *)
     (* Get return value from a1 *)
