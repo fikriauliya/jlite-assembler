@@ -39,7 +39,80 @@ end
 
 let labelcount = ref 0 
 let fresh_label () = 
-  (labelcount := !labelcount+1; "L" ^ (string_of_int !labelcount))
+  (labelcount := !labelcount+1; ".L" ^ (string_of_int !labelcount))
+
+let stringlabelcount = ref 0
+let fresh_string_label () =
+  (stringlabelcount := !stringlabelcount+1; "L" ^ (string_of_int !stringlabelcount))
+
+let string_table = Hashtbl.create 100
+
+let add_idc3_to_string_table idc3 =
+  begin
+    match idc3 with
+    | StringLiteral3 str ->
+      Hashtbl.add string_table str (fresh_string_label())
+    | _ ->
+      ()
+  end
+
+let add_ir3_exp_to_string_table exp3 =
+  begin
+    match exp3 with
+    | BinaryExp3 (_,idc3,idc3') ->
+      add_idc3_to_string_table idc3;
+      add_idc3_to_string_table idc3'
+    | UnaryExp3 (_,idc3) ->
+      add_idc3_to_string_table idc3
+    | Idc3Expr (idc3) ->
+      add_idc3_to_string_table idc3
+    | MdCall3 (_,idc3list) ->
+      let rec helper idc3s =
+        begin
+          match idc3s with
+          | [] ->
+            ()
+          | idc3::idc3s' ->
+            add_idc3_to_string_table idc3;
+            helper idc3s'
+        end
+      in helper idc3list
+    | _ ->
+      ()
+  end
+
+let add_ir3_stmt_to_string_table stmt3 =
+  begin
+    match stmt3 with
+    | IfStmt3 (exp3,_) ->
+      add_ir3_exp_to_string_table exp3
+    | PrintStmt3 (idc3) ->
+      add_idc3_to_string_table idc3
+    | AssignStmt3 (_,exp3) ->
+      add_ir3_exp_to_string_table exp3
+    | AssignDeclStmt3 (_,_,exp3) ->
+      add_ir3_exp_to_string_table exp3
+    | AssignFieldStmt3 (exp3,exp3') ->
+      add_ir3_exp_to_string_table exp3;
+      add_ir3_exp_to_string_table exp3'
+    | MdCallStmt3 (exp3) -> 
+      add_ir3_exp_to_string_table exp3
+    | _ ->
+      ()
+  end
+
+let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
+  let rec helper stmts =
+    begin
+      match stmts with
+      | [] ->
+        ()
+      | s::stmts' ->
+        add_ir3_stmt_to_string_table s;
+        helper stmts'
+    end      
+  in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
+
 
 (*
  * Calculate size of a variable.
