@@ -60,6 +60,8 @@ let fresh_string_label () =
 (* Contains the string literals and format specifiers *)
 let string_table = Hashtbl.create 100
 
+(* Adds a string literal to the string table, adds an int literal format specifier
+ * if the is print stmt is true *)
 let add_idc3_to_string_table idc3 isPrintStmt =
   begin
     match idc3 with
@@ -74,6 +76,7 @@ let add_idc3_to_string_table idc3 isPrintStmt =
       ()
   end
 
+(* Adds a string literal to the string table if the expression contains a string literal *)
 let add_ir3_exp_to_string_table exp3 =
   begin
     match exp3 with
@@ -99,6 +102,9 @@ let add_ir3_exp_to_string_table exp3 =
       ()
   end
 
+(* Adds a string literal to the string table if the stmt contains an expression
+ * with a string literal or adds a int format specifier to the string table if
+ * it is a print stmt with an int or integer variable *)
 let add_ir3_stmt_to_string_table stmt3 =
   begin
     match stmt3 with
@@ -119,6 +125,7 @@ let add_ir3_stmt_to_string_table stmt3 =
       ()
   end
 
+(* Adds string literals and/or integer format specifier to the string table *)
 let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
   let rec helper stmts =
     begin
@@ -420,15 +427,52 @@ let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) 
 
 (* 4 *)
 let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
-  (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3): (reg * (arm_instr list)) =
-  ("v1", [])
-(*  let get_var_register var_id =
-    let f (regn,varn) = match varn with None -> false | n -> n = var_id in
-    if List.exists f rallocs then List.find f rallocs
+  (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3) (*(no_spill_vars: id3 list)*)
+  : reg * arm_instr list =
+(*  ("v1", [])*)
+  
+  let idc3_to_id3_list idc = match idc with Var3 id -> [id] | _ -> [] in
+  let no_spill_vars exp = match exp with
+  | BinaryExp3 (_, idc1, idc2) -> idc3_to_id3_list idc1 @ idc3_to_id3_list idc2
+  | FieldAccess3 (id1, id2) -> [id1;id2]
+  | Idc3Expr id | UnaryExp3 (_, id) -> idc3_to_id3_list id
+  | MdCall3 _ (* MdCall is handled specially by explicitly setting registers a1..4 using load/store_variable *)
+  | ObjectCreate3 _ -> []
   in
+  let no_spill_vars = match currstmt with
+  | Label3 _ | GoTo3 _ | ReadStmt3 _ | PrintStmt3 _ | ReturnStmt3 _ | ReturnVoidStmt3 -> []
+  | IfStmt3 (exp, _) | MdCallStmt3 exp -> no_spill_vars exp
+  | AssignFieldStmt3 (exp1, exp2) -> no_spill_vars exp1 @ no_spill_vars exp2
+  | AssignStmt3 (id, exp) | AssignDeclStmt3 (_, id, exp) -> id::(no_spill_vars exp)
+  in
+  
+  let get_var_register var_id =
+    let f (regn,varn) = match !varn with None -> false | Some n -> n = var_id in
+    if List.exists f rallocs then Some (List.find f rallocs) else None
+  in
+  
+  let allocate_var var_id: (reg * (arm_instr list)) =
+    let free (regn,varn) = match !varn with None -> true | Some _ -> false in
+    if List.exists free rallocs then
+      let (regn,varn) = List.find free rallocs in
+      let () = varn := Some var_id in
+      regn, load_variable stack_frame regn var_id
+    else (* we have to spill a register on the stack *)
+      let pick_spill_reg() =
+        List.find (fun (regn,varn) -> not
+          (* picks the first register that doesn't hold a var in no_spill_vars *)
+          (List.exists (fun n -> match !varn with None -> false | Some v -> n = v) no_spill_vars)) rallocs in
+      let spilled_reg, spilled_var = pick_spill_reg() in
+      let spilled_var = match !spilled_var with Some v -> v | _ -> failwith "unexpected quirk" in
+      
+      spilled_reg,
+        (store_variable stack_frame spilled_reg spilled_var)
+      @ (load_variable stack_frame spilled_reg var_id)
+  in
+  
   match get_var_register vid with
-  | reg -> reg, []
-  | None -> *)
+  | Some (reg, _) -> reg, []
+  | None -> allocate_var vid
 
 (* 2 *)
 let ir3_idc3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3): (reg * (arm_instr list)) =
@@ -663,7 +707,7 @@ let ir3_stmt_to_arm
         let movinstr = MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i))) in
         let blinstr = BL("","printf(PLT)") in
         [ldrinstr; movinstr; blinstr]
-      | _ -> failwith ("PrintStmt3: currently only supports string literals")
+      | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
     end
   (* 2 *)
   | AssignStmt3 (id, exp) ->
