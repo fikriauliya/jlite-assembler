@@ -51,7 +51,85 @@ end
 
 let labelcount = ref 0 
 let fresh_label () = 
-  (labelcount := !labelcount+1; "L" ^ (string_of_int !labelcount))
+  (labelcount := !labelcount+1; ".L" ^ (string_of_int !labelcount))
+
+let stringlabelcount = ref 0
+let fresh_string_label () =
+  (stringlabelcount := !stringlabelcount+1; "L" ^ (string_of_int !stringlabelcount))
+
+(* Contains the string literals and format specifiers *)
+let string_table = Hashtbl.create 100
+
+let add_idc3_to_string_table idc3 isPrintStmt =
+  begin
+    match idc3 with
+    | StringLiteral3 str ->
+      Hashtbl.add string_table str (fresh_string_label())
+    | IntLiteral3 _ ->
+      if isPrintStmt then
+        Hashtbl.add string_table "%i" (fresh_string_label())
+      else
+        ()
+    | _ ->
+      ()
+  end
+
+let add_ir3_exp_to_string_table exp3 =
+  begin
+    match exp3 with
+    | BinaryExp3 (_,idc3,idc3') ->
+      add_idc3_to_string_table idc3 false;
+      add_idc3_to_string_table idc3' false
+    | UnaryExp3 (_,idc3) ->
+      add_idc3_to_string_table idc3 false
+    | Idc3Expr (idc3) ->
+      add_idc3_to_string_table idc3 false
+    | MdCall3 (_,idc3list) ->
+      let rec helper idc3s =
+        begin
+          match idc3s with
+          | [] ->
+            ()
+          | idc3::idc3s' ->
+            add_idc3_to_string_table idc3 false;
+            helper idc3s'
+        end
+      in helper idc3list
+    | _ ->
+      ()
+  end
+
+let add_ir3_stmt_to_string_table stmt3 =
+  begin
+    match stmt3 with
+    | IfStmt3 (exp3,_) ->
+      add_ir3_exp_to_string_table exp3
+    | PrintStmt3 (idc3) ->
+      add_idc3_to_string_table idc3 true
+    | AssignStmt3 (_,exp3) ->
+      add_ir3_exp_to_string_table exp3
+    | AssignDeclStmt3 (_,_,exp3) ->
+      add_ir3_exp_to_string_table exp3
+    | AssignFieldStmt3 (exp3,exp3') ->
+      add_ir3_exp_to_string_table exp3;
+      add_ir3_exp_to_string_table exp3'
+    | MdCallStmt3 (exp3) -> 
+      add_ir3_exp_to_string_table exp3
+    | _ ->
+      ()
+  end
+
+let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
+  let rec helper stmts =
+    begin
+      match stmts with
+      | [] ->
+        ()
+      | s::stmts' ->
+        add_ir3_stmt_to_string_table s;
+        helper stmts'
+    end      
+  in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
 
 let var_in_register (rallocs: reg_allocations) (r: reg): (id3 option) =
   let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
@@ -369,7 +447,7 @@ let rec cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
 
 let rec ir3_exp_to_arm 
-    (localvars: var_decl3 list) (rallocs: reg_allocations)
+    (clist: cdata3 list) (localvars: var_decl3 list) (rallocs: reg_allocations)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
     (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list) * (arm_instr list)) = 
   let get_assigned_register stmt = match stmt with
@@ -532,14 +610,18 @@ let rec ir3_exp_to_arm
     (* Manage arguments!! *)
     (* Get return value from a1 *)
   (* 4 *)
-  | ObjectCreate3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
+  | ObjectCreate3 class_name ->
+    let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
+    let movinstr = MOV("",false,"a1",ImmedOp("#" ^ string_of_int objectSize)) in
+    let blinstr = BL("","_Znwj(PLT)") in
+    ("a1", [movinstr; blinstr], [])
 
 let ir3_stmt_to_arm
-    (localvars: var_decl3 list) (rallocs: reg_allocations) (return_label: label)
+    (clist: cdata3 list) (localvars: var_decl3 list) (rallocs: reg_allocations) (return_label: label)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
     (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
   let ir3_id3_partial = ir3_id3_to_arm rallocs stack_frame stmts in
-  let ir3_exp_partial = ir3_exp_to_arm localvars rallocs stack_frame type_layouts stmts in
+  let ir3_exp_partial = ir3_exp_to_arm clist localvars rallocs stack_frame type_layouts stmts in
   match stmt with
   (* 1 *)
   | Label3 label ->
@@ -558,7 +640,22 @@ let ir3_stmt_to_arm
   (* 1 *)
   | ReadStmt3 _ -> failwith ("ReadStmt3: STATEMENT NOT IMPLEMENTED")
   (* 1 *)
-  | PrintStmt3 _ -> failwith ("PrintStmt3: STATEMENT NOT IMPLEMENTED")
+  | PrintStmt3 idc3 ->
+    begin
+      match idc3 with
+      | StringLiteral3 str ->
+        let label = Hashtbl.find string_table str in
+        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
+        let blinstr = BL("","printf(PLT)") in
+        [ldrinstr; blinstr]
+      | IntLiteral3 i ->
+        let label = Hashtbl.find string_table "%i" in
+        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
+        let movinstr = MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i))) in
+        let blinstr = BL("","printf(PLT)") in
+        [ldrinstr; movinstr; blinstr]
+      | _ -> failwith ("PrintStmt3: currently only supports string literals")
+    end
   (* 2 *)
   | AssignStmt3 (id, exp) ->
     let (id_reg_dst, id_instr) = ir3_id3_partial stmt id in
@@ -614,9 +711,16 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (* Callee stack & register management END *)
   let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
-  let ir3_stmt_partial = ir3_stmt_to_arm localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
+  let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
   method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
+  add_ir3_program_to_string_table (classes, main_method, methods);
   let ir3_method_partial = ir3_method_to_arm classes in
-  List.flatten (List.map ir3_method_partial (main_method :: methods))
+  let dataSegment = PseudoInstr ".data" in
+  let string_table_to_arm = Hashtbl.fold 
+    (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
+  let textSegment = PseudoInstr ".text" in
+  let mainExport = PseudoInstr ".global main" in
+  [dataSegment] @ string_table_to_arm @ [textSegment; mainExport] @
+  (List.flatten (List.map ir3_method_partial (main_method :: methods)))
