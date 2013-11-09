@@ -482,7 +482,47 @@ let rec ir3_exp_to_arm
       (* TODO: how to get the variable type? *)
     in dstreg, var_instr @ dstinstr @ [ldr_instr]
   (* 5 *)
-  | MdCall3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
+  | MdCall3 (m_id, args) ->
+    let mdargs_to_reg (idc: idc3) (dst: reg): (arm_instr list) = 
+      match idc with
+      | IntLiteral3 i -> [MOV("", false, dst, ImmedOp("#" ^ string_of_int i))]
+      (* TODO: Replace with whatever way we represent boolean *)
+      | BoolLiteral3 b -> [MOV("", false, dst, ImmedOp("#" ^ string_of_bool b))]
+      (* TODO: Replace with the address of string later *)
+      | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
+      (* TODO: Spill and allocate to register *)
+      | Var3 id3 -> [MOV("", false, dst, ImmedOp("#" ^ id3))]
+      (* TODO: Add information about arguments to table here if needed *)
+    in
+    let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
+      begin
+        match idc with
+        | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
+        (* TODO: Spill and allocate to register *)
+        | Var3 id3 ->
+          let (var_reg, var_instr) = ir3_id3_to_arm asvs stack_frame stmts currstmt id3 in
+          var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", arg_index*4, false))]
+          (* TODO: Add information about arguments to table here if needed *)
+      end
+    in
+    let rec prepare_reg_args arg_index args =
+      if (List.length args) <= arg_index then []
+      else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int arg_index) :: (prepare_reg_args (arg_index + 1) args)
+    in
+    let rec prepare_stack_args arg_index args =
+      if (List.length args) <= arg_index then []
+      (* Push arguments with reverse order.
+       * Change if stack frame layout for parameter is changed. *)
+      else (prepare_stack_args (arg_index + 1) args) @ [mdargs_to_stack (List.nth args arg_index) arg_index]
+    in
+    let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
+    let args_space = 4 * (List.length args) in
+    let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (args_space))) in
+    let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
+    ("v1", caller_save :: allocate_args_stack :: [caller_load])
+    (* Manage caller registers *)
+    (* Manage arguments!! *)
+    (* Get return value from a1 *)
   (* 4 *)
   | ObjectCreate3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
 
@@ -522,13 +562,9 @@ let ir3_stmt_to_arm
   (* 2 *)
   | AssignFieldStmt3 _ -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED")
   (* 3 *)
-  | MdCallStmt3 _ ->
-    (* Manage caller registers *)
-    (* Manage arguments!! *)
-    (* Get return value from a1 *)
-    let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
-    let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    failwith ("MdCallStmt3: STATEMENT NOT IMPLEMENTED")
+  | MdCallStmt3 exp ->
+    let (exp_reg_dst, exp_instr) = ir3_exp_partial stmt exp in
+    exp_instr
   (* 1 *)
   | ReturnStmt3 id ->
     (* Use register allocator's method to force a1 later *)
