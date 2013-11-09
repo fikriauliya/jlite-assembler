@@ -236,8 +236,8 @@ let rec ir3_exp_to_arm
       match op with
       | BooleanOp bop ->
         begin
-          let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
-          let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+          let (op1reg, op1instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc1 in
+          let (op2reg, op2instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc2 in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match bop with
           | "||" ->
@@ -251,8 +251,8 @@ let rec ir3_exp_to_arm
       | RelationalOp rop ->
         begin
           let relationalOpHelper (movcond1: string) (movcond2: string) =
-            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
-            let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+            let (op1reg, op1instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc1 in
+            let (op2reg, op2instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc2 in
             let (dstreg, dstinstr) = get_assigned_register currstmt in
             let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
             let mveqinstr = MOV(movcond1, false, op1reg, ImmedOp("#1")) in
@@ -263,8 +263,8 @@ let rec ir3_exp_to_arm
             begin
             match idc2 with
             | BoolLiteral3 _ ->
-              let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
-              let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+              let (op1reg, op1instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc1 in
+              let (op2reg, op2instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc2 in
               let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
               (op1reg, op1instr @ op2instr @ [eqinstr])
             | _ ->  
@@ -284,8 +284,8 @@ let rec ir3_exp_to_arm
         end
       | AritmeticOp aop ->
         begin
-          let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
-          let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+          let (op1reg, op1instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc1 in
+          let (op2reg, op2instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc2 in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match aop with
           | "+" ->
@@ -307,7 +307,7 @@ let rec ir3_exp_to_arm
       match op with
       | UnaryOp op ->
         begin
-          let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc in
+          let (op1reg, op1instr) = ir3_idc3_to_arm asvs stack_frame stmts currstmt idc in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match op with
           | "!" ->
@@ -382,7 +382,7 @@ let ir3_stmt_to_arm
   (* 1 *)
   | ReturnStmt3 id ->
     (* Use register allocator's method to force a1 later *)
-    let (return_reg, return_instr) = ir3_id3_to_arm asvs sm stmts stmt id in
+    let (return_reg, return_instr) = ir3_id3_to_arm asvs stack_frame stmts stmt id in
     let move_result = MOV("", false, "a1", RegOp(return_reg)) in
     return_instr @ [move_result; B("", return_label)]
   (* 1 *)
