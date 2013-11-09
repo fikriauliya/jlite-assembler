@@ -32,7 +32,7 @@ type stack_memory_map_type =
 *)
 
 type type_layout =
-  (id3 * memory_address_offset) list
+(id3 * memory_address_offset) list
 
 type enhanced_stmt = {
   embedded_stmt: ir3_stmt;
@@ -77,6 +77,7 @@ let add_idc3_to_string_table idc3 isPrintStmt =
     match idc3 with
     | StringLiteral3 str ->
       Hashtbl.add string_table str (fresh_string_label())
+    | Var3 _
     | IntLiteral3 _ ->
       if isPrintStmt then
         Hashtbl.add string_table "%i" (fresh_string_label())
@@ -767,6 +768,13 @@ let ir3_stmt_to_arm
         let label = Hashtbl.find string_table "%i" in
         let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
         let movinstr = MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i))) in
+        let blinstr = BL("","printf(PLT)") in
+        [ldrinstr; movinstr; blinstr]
+      | Var3 id3 ->
+        let label = Hashtbl.find string_table "%i" in
+        let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts stmt id3 in
+        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
+        let movinstr = MOV("",false,"a2",RegOp(var_reg)) in
         let blinstr = BL("","printf(PLT)") in
         [ldrinstr; movinstr; blinstr]
       | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
