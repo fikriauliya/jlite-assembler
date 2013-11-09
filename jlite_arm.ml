@@ -510,6 +510,7 @@ let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) 
 (* 4 *)
 let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
   (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3) (*(no_spill_vars: id3 list)*)
+  (write_only: bool)
   : reg * arm_instr list =
 (*  ("v1", [])*)
   
@@ -533,12 +534,18 @@ let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
     if List.exists f rallocs then Some (List.find f rallocs) else None
   in
   
+  let maybe_load regn varn =
+    if write_only then []
+    else load_variable stack_frame regn varn
+  in
+  
   let allocate_var var_id: (reg * (arm_instr list)) =
     let free (regn,varn) = match !varn with None -> true | Some _ -> false in
     if List.exists free rallocs then
       let (regn,varn) = List.find free rallocs in
       let () = varn := Some var_id in
-      regn, load_variable stack_frame regn var_id
+(*      regn, load_variable stack_frame regn var_id *)
+      regn, maybe_load regn var_id
     else (* we have to spill a register on the stack *)
       let pick_spill_reg() =
         List.find (fun (regn,varn) -> not
@@ -549,7 +556,8 @@ let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
       
       spilled_reg,
         (store_variable stack_frame spilled_reg spilled_var)
-      @ (load_variable stack_frame spilled_reg var_id)
+(*      @ (load_variable stack_frame spilled_reg var_id) *)
+      @ maybe_load spilled_reg var_id
   in
   
   match get_var_register vid with
@@ -559,7 +567,7 @@ let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
 (* 2 *)
 let ir3_idc3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3): (reg * (arm_instr list)) =
   match vidc3 with
-  | Var3 vid -> ir3_id3_to_arm rallocs stack_frame stmts currstmt vid
+  | Var3 vid -> ir3_id3_to_arm rallocs stack_frame stmts currstmt vid false
   | IntLiteral3 i ->  "#" ^ (string_of_int i), [] (*TODO: replace this stub*)
   | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), [] (*TODO: replace this stub*)
   | StringLiteral3 s ->  "#" ^ s, [] (*TODO: replace this stub*)
@@ -576,10 +584,11 @@ let rec ir3_exp_to_arm
     (clist: cdata3 list) (localvars: var_decl3 list) (rallocs: reg_allocations)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
     (stmts: ir3_stmt list) (currstmt: ir3_stmt) (exp: ir3_exp): (reg * (arm_instr list) * (arm_instr list)) = 
+  
   let get_assigned_register stmt = match stmt with
   | AssignStmt3(id,_)
   | AssignDeclStmt3(_,id,_)
-    -> ir3_id3_to_arm rallocs stack_frame stmts currstmt id
+    -> ir3_id3_to_arm rallocs stack_frame stmts currstmt id true
   | _ -> failwith "Tried to retrieve the assigned register from a non-assignment statement"
   
   in match exp with
@@ -641,18 +650,36 @@ let rec ir3_exp_to_arm
       | AritmeticOp aop ->
         begin
           let (op1reg, op1instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc1 in
-          let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
           let (dstreg, dstinstr) = get_assigned_register currstmt in
           match aop with
           | "+" ->
-            let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+            begin
+              match idc2 with
+              | IntLiteral3 i ->
+                let instr = ADD("", false, dstreg, op1reg, ImmedOp("# " ^ string_of_int i)) in
+                (dstreg, op1instr @ dstinstr @ [instr], [])
+              | Var3 _ ->
+                let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
+                let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
+                (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+              | _ -> failwith ("Arithmetic operand not supported")
+            end
           | "*" ->
+            let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
-            let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+            begin
+              match idc2 with
+              | IntLiteral3 i ->
+                let instr = SUB("", false, dstreg, op1reg, ImmedOp("# " ^ string_of_int i)) in
+                (dstreg, op1instr @ dstinstr @ [instr], [])
+              | Var3 _ ->
+                let (op2reg, op2instr) = ir3_idc3_to_arm rallocs stack_frame stmts currstmt idc2 in
+                let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
+                (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+              | _ -> failwith ("Aritmetic operand not supported")
+            end
           | _ -> failwith ("Arithmetic operand not supported")
         end
       | _ -> failwith ("Not operand of binary exp")
@@ -680,7 +707,7 @@ let rec ir3_exp_to_arm
     end
   (* 4 *)
   | FieldAccess3 (var_id3, field_name_id3) -> (*failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)*)
-    let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt var_id3 in
+    let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt var_id3 false in
     let (dstreg, dstinstr) = get_assigned_register currstmt in
     let cname = cname_from_id3 localvars var_id3 in
     let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name_id3, false))
@@ -697,27 +724,18 @@ let rec ir3_exp_to_arm
       (* TODO: Replace with the address of string later *)
       | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
       (* TODO: Spill and allocate to register *)
-      | Var3 id3 ->
-        begin
-          let mov_arg_to_reg = load_variable stack_frame dst id3 in
-          let curr_reg_var = var_in_register rallocs dst in
-          match curr_reg_var with
-          | Some v ->
-            if v <> id3 then
-              begin
-                store_variable stack_frame dst v @ mov_arg_to_reg
-              end
-            else []
-          | None -> mov_arg_to_reg
-        end
+      | Var3 id3 -> [MOV("", false, dst, ImmedOp("#" ^ id3))]
+      (* TODO: Add information about arguments to table here if needed *)
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
       begin
         match idc with
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
+        (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
-          let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt id3 in
+          let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts currstmt id3 false in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
+          (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
@@ -739,11 +757,9 @@ let rec ir3_exp_to_arm
         first_four_args @ rest_args
       end
     in
+    let actual_call = BL("", m_id) in
     let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args), [caller_load])
-    (* Manage caller registers *)
-    (* Manage arguments!! *)
-    (* Get return value from a1 *)
+    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call], [caller_load])
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
@@ -791,7 +807,7 @@ let ir3_stmt_to_arm
         [ldrinstr; movinstr; blinstr]
       | Var3 id3 ->
         let label = Hashtbl.find string_table "%i" in
-        let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts stmt id3 in
+        let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts stmt id3 false in
         let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
         let movinstr = MOV("",false,"a2",RegOp(var_reg)) in
         let blinstr = BL("","printf(PLT)") in
@@ -800,14 +816,17 @@ let ir3_stmt_to_arm
     end
   (* 2 *)
   | AssignStmt3 (id, exp) ->
-    let (id_reg_dst, id_instr) = ir3_id3_partial stmt id in
+    let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in (*ir3_id3_to_arm rallocs stack_frame stmts true in*) (* ir3_id3_partial stmt id in *)
     let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
-    let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
-    id_instr @ exp_instr @ [move_result] @ post_instr
+    if id_reg_dst = exp_reg_dst then (*and List.length exp_instr = 0*)
+      id_instr @ exp_instr @ post_instr
+    else
+      let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
+      id_instr @ exp_instr @ [move_result] @ post_instr
   (* 1 *)
   | AssignDeclStmt3 _ -> failwith ("AssignDeclStmt3: STATEMENT NOT IMPLEMENTED")
   (* 2 *)
-  | AssignFieldStmt3 _ -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED")
+  | AssignFieldStmt3 (fla, exp) -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED") 
   (* 3 *)
   | MdCallStmt3 exp ->
     let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
@@ -815,16 +834,28 @@ let ir3_stmt_to_arm
   (* 1 *)
   | ReturnStmt3 id ->
     (* Use register allocator's method to force a1 later *)
-    let (return_reg, return_instr) = ir3_id3_to_arm rallocs stack_frame stmts stmt id in
+    let (return_reg, return_instr) = ir3_id3_to_arm rallocs stack_frame stmts stmt id false in
     let move_result = MOV("", false, "a1", RegOp(return_reg)) in
     return_instr @ [move_result; B("", return_label)]
   (* 1 *)
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
-let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_decl3): (arm_instr list) =
+let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
+  let rallocs = [
+    "a1", ref None;
+    "a2", ref None;
+    "a3", ref None;
+    "a4", ref None;
+    "v1", ref None;
+    "v2", ref None;
+    "v3", ref None;
+    "v4", ref None;
+    "v5", ref None;
+    (* TODO: use other registers for variables? *)
+  ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
   let callee_save = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
@@ -842,23 +873,27 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
   let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
   let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
-  method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
+  begin
+    (* Telling function that some arguments are on registers *)
+    let args = mthd.params3 in
+    let args_length = List.length args in
+    let nth_var = List.nth rallocs in
+    let set_nth_var n =
+      let (r, v) = (nth_var n) in
+      let (v_type, v_name) = List.nth mthd.params3 n in
+      v := Some v_name
+    in
+    let rec set_nth_below n curr =
+      if (curr < n) then (set_nth_var curr; set_nth_below n (curr+1))
+      else ()
+    in
+    let mthd_instr = method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
+    (set_nth_below args_length (args_length-1); mthd_instr)
+  end
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   add_ir3_program_to_string_table (classes, main_method, methods);
-  let rallocs = [
-    "a1", ref None;
-    "a2", ref None;
-    "a3", ref None;
-    "a4", ref None;
-    "v1", ref None;
-    "v2", ref None;
-    "v3", ref None;
-    "v4", ref None;
-    "v5", ref None;
-    (* TODO: use other registers for variables? *)
-  ] in
-  let ir3_method_partial = ir3_method_to_arm classes rallocs in
+  let ir3_method_partial = ir3_method_to_arm classes in
   let dataSegment = PseudoInstr ".data" in
   let string_table_to_arm = Hashtbl.fold 
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
