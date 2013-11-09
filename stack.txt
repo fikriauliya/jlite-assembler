@@ -1,3 +1,43 @@
+=================================
+Only this section contains the correct stack layout.
+
+Compute_0 and Compute_1
+0xFFFF High memory
+......
+0x0000 Lower memory
+
+[ ]  <- old sp
+[v1]
+[v2]
+[v3]
+[v4]
+[v5]
+[lr]
+[fp] <- sp
+
+[ ]  <- old sp
+[v1] <- fp
+[v2]
+[v3]
+[v4]
+[v5]
+[lr]
+[fp] <- sp
+
+[ ]  <- old sp
+[v1] <- fp
+[v2]
+[v3]
+[v4]
+[v5]
+[lr]
+[fp]
+[??] <- updated sp
+?? = local variables
+
+Correct stack layout END
+==================================
+
 [fp] <- sp
 [lr]
 [v1]
@@ -46,7 +86,7 @@
 
 -----
 main
-[fp] <- sp
+[fp] <- old sp
 [lr]
 [v1]
 [v2]
