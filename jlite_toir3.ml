@@ -213,7 +213,7 @@ let rec jlitestmts_to_IR3Stmts
         )
       | WhileStmt (e, stmts) -> 
         let (expr3,exprvars,exprstmts) = 
-          (jliteexpr_to_IR3Expr classid e true true) in
+          (jliteexpr_to_IR3Expr classid e true false) in
         let negatedExp = (negate_relational_exp expr3) in
         let (vars,stmst) = 
           (jlitestmts_to_IR3Stmts classid mthd stmts) in 
