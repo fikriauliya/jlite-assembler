@@ -342,30 +342,64 @@ end
 let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type) =
   ([], [])
 
-(* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
+
 let derive_layout (clist: cdata3 list) ((cname,decls): cdata3): cname3 * type_layout =
-  let offset = ref 0 in
+  derive_precise_layout clist (cname,decls) 0 true
+
+(* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
+let derive_precise_layout (clist: cdata3 list) ((cname,decls): cdata3)
+    (starting_offset: int) (ascending_order: bool): cname3 * type_layout =derive_precise_layout
+  let offset = ref starting_offset in
+  let dir = if ascending_order then 1 else -1
   cname, List.map (fun (t,id) -> id,
     let off = !offset in
     begin
-      offset := !offset + (calc_var_size clist (t,id));
+      offset := !offset + (calc_var_size clist (t,id))*dir;
       off
     end) decls
+
+(*
+(* Takes the first n element in a list and returns two list: those elements and the remaining ones *)
+let rec vertical_split n ls =
+  if n <= 0 then [], ls else match ls with
+    | h::rest -> let frst,scnd = take_first (n-1) in h::frst, scnd
+    | [] -> [], []
+*)
 
 (*let derive_stack_memory_map (params: (var_decl3 list)) (localvars: (var_decl3 list)) =
   ([])*)
 let derive_stack_frame (clist: cdata3 list) (params: (var_decl3 list)) (localvars: (var_decl3 list)): type_layout =
-  let _, lay = derive_layout clist ("",params)
-  in lay
+(*  let first_4_params, rest_params = vertical_split 4 params
+  let _, rest_params_layout = derive_layout clist ("", rest_params) 4 true in
+  (* The first 4 parameters are passed in register; in order to be able to spill them on the stack, we reserve some space for them *)
+  let _, vars_layout = derive_layout clist ("", first_4_params @ localvars) -28 false in
+  rest_params_layout @ vars_layout*)
+  let _, params_layout = derive_layout clist ("", params) 4 true in
+  let _, vars_layout = derive_layout clist ("", localvars) -28 false in
+  params_layout @ vars_layout
 
 (* Returns the relative position of a field in an object of a given type
   TODO
   TODO also take the class as an argument
 *)
-let get_field_shift (cname: cname3) (type_layouts: (cname3 * type_layout) list) (field_name: id3) =
+let get_field_offset (cname: cname3) (type_layouts: (cname3 * type_layout) list) (field_name: id3) =
   let nam,lay = List.find (fun (nam,_) -> nam = cname) type_layouts in
   let id,offs = List.find (fun (id,offs) -> id = field_name) lay in
   offs
+
+let get_variable_offset (stack_frame: type_layout) (var_name: id3) =
+  let _, offset = List.find (fun (id,_) -> id = var_name) stack_frame
+  in offset
+
+let load_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3): arm_instr list =
+  let offset = get_variable_offset stack_frame var_name in
+  let lrd = LDR("", "", dst_reg, RegPreIndexed("fp", offset, false)) in
+  [ldr]
+
+let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): arm_instr list =
+  let offset = get_variable_offset stack_frame var_name in
+  let str = STR("", "", src_reg, RegPreIndexed("fp", offset, false)) in
+  [str]
 
 (* 5 *)
 let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
@@ -500,12 +534,52 @@ let rec ir3_exp_to_arm
     let (var_reg, var_instr) = ir3_id3_to_arm asvs stack_frame stmts currstmt var_id3 in
     let (dstreg, dstinstr) = get_assigned_register currstmt in
     let cname = cname_from_id3 localvars var_id3 in
-    let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_shift cname type_layouts field_name_id3, false))
+    let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name_id3, false))
       (* TODO: handle non-word fields; *)
       (* TODO: how to get the variable type? *)
     in dstreg, var_instr @ dstinstr @ [ldr_instr]
   (* 5 *)
-  | MdCall3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
+  | MdCall3 (m_id, args) ->
+    let mdargs_to_reg (idc: idc3) (dst: reg): (arm_instr list) = 
+      match idc with
+      | IntLiteral3 i -> [MOV("", false, dst, ImmedOp("#" ^ string_of_int i))]
+      (* TODO: Replace with whatever way we represent boolean *)
+      | BoolLiteral3 b -> [MOV("", false, dst, ImmedOp("#" ^ string_of_bool b))]
+      (* TODO: Replace with the address of string later *)
+      | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
+      (* TODO: Spill and allocate to register *)
+      | Var3 id3 -> [MOV("", false, dst, ImmedOp("#" ^ id3))]
+      (* TODO: Add information about arguments to table here if needed *)
+    in
+    let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
+      begin
+        match idc with
+        | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
+        (* TODO: Spill and allocate to register *)
+        | Var3 id3 ->
+          let (var_reg, var_instr) = ir3_id3_to_arm asvs stack_frame stmts currstmt id3 in
+          var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", arg_index*4, false))]
+          (* TODO: Add information about arguments to table here if needed *)
+      end
+    in
+    let rec prepare_reg_args arg_index args =
+      if (List.length args) <= arg_index then []
+      else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int arg_index) :: (prepare_reg_args (arg_index + 1) args)
+    in
+    let rec prepare_stack_args arg_index args =
+      if (List.length args) <= arg_index then []
+      (* Push arguments with reverse order.
+       * Change if stack frame layout for parameter is changed. *)
+      else (prepare_stack_args (arg_index + 1) args) @ [mdargs_to_stack (List.nth args arg_index) arg_index]
+    in
+    let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
+    let args_space = 4 * (List.length args) in
+    let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (args_space))) in
+    let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
+    ("v1", caller_save :: allocate_args_stack :: [caller_load])
+    (* Manage caller registers *)
+    (* Manage arguments!! *)
+    (* Get return value from a1 *)
   (* 4 *)
   | ObjectCreate3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
 
@@ -554,13 +628,9 @@ let ir3_stmt_to_arm
   (* 2 *)
   | AssignFieldStmt3 _ -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED")
   (* 3 *)
-  | MdCallStmt3 _ ->
-    (* Manage caller registers *)
-    (* Manage arguments!! *)
-    (* Get return value from a1 *)
-    let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
-    let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    failwith ("MdCallStmt3: STATEMENT NOT IMPLEMENTED")
+  | MdCallStmt3 exp ->
+    let (exp_reg_dst, exp_instr) = ir3_exp_partial stmt exp in
+    exp_instr
   (* 1 *)
   | ReturnStmt3 id ->
     (* Use register allocator's method to force a1 later *)
