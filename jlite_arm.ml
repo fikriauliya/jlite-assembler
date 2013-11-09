@@ -597,11 +597,13 @@ let ir3_id3_to_arm (rallocs: reg_allocations) (stack_frame: type_layout)
         List.find (fun (regn,varn) -> not
           (* picks the first register that doesn't hold a var in no_spill_vars *)
           (List.exists (fun n -> match !varn with None -> false | Some v -> n = v) no_spill_vars)) rallocs in
-      let spilled_reg, spilled_var = pick_spill_reg() in
-      let spilled_var = match !spilled_var with Some v -> v | _ -> failwith "unexpected quirk" in
+      let spilled_reg, spilled_var_ref = pick_spill_reg() in
+      let spilled_var = match !spilled_var_ref with Some v -> v | _ -> failwith "unexpected quirk" in
+      let store_instrs = store_variable stack_frame spilled_reg spilled_var in
+      let () = spilled_var_ref := None in
       
       spilled_reg,
-        (store_variable stack_frame spilled_reg spilled_var)
+        store_instrs
 (*      @ (load_variable stack_frame spilled_reg var_id) *)
       @ maybe_load spilled_reg var_id
   in
@@ -877,6 +879,14 @@ let ir3_stmt_to_arm
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
+let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) = [
+    EMPTY;
+    COM ("Funcion " ^ mthd.id3);
+    COM "Local variable offsets:";
+  ]
+  @ List.map (fun (id,off) -> COM ("  " ^ id ^ " : " ^ (string_of_int off))) stack_frame
+  @ [EMPTY]
+
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
@@ -909,6 +919,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
   let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
+  let md_comments = gen_md_comments mthd stack_frame in
   begin
     (* Telling this function that some arguments are on registers *)
     (* Assuming 1st variable on a1, 2nd on a2 ..., 4th on a4 *)
@@ -921,7 +932,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
       if (curr < n) then (set_nth_var curr; set_nth_below n (curr+1))
       else ()
     in
-    let mthd_instr = method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
+    let mthd_instr = method_prefix @ md_comments @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
     (set_nth_below (min (List.length mthd.params3) 4) 0; mthd_instr)
   end
 
