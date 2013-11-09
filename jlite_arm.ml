@@ -24,11 +24,15 @@ let println line = begin
   printf "%s\n" line;
 end
 
+let labelcount = ref 0 
+let fresh_label () = 
+  (labelcount := !labelcount+1; "L" ^ (string_of_int !labelcount))
+
 (*
  * Calculate size of a variable.
  * Each variable occupies 4 bytes.
 *)
-let calc_var_size ((v_type, _): var_decl3) (clist: (cdata3 list)) =
+let calc_var_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
   match v_type with
   | IntT | BoolT | StringT -> 4
   | ObjectT cname ->
@@ -276,7 +280,7 @@ let rec ir3_exp_to_arm
   | ObjectCreate3 _ as e -> failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)
 
 let ir3_stmt_to_arm
-    (localvars: var_decl3 list) (asvs: active_spill_variables_type)
+    (localvars: var_decl3 list) (asvs: active_spill_variables_type) (return_label: label)
     (sm: stack_memory_map_type) (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
   let ir3_id3_partial = ir3_id3_to_arm asvs sm stmts in
   let ir3_exp_partial = ir3_exp_to_arm localvars asvs sm stmts in
@@ -310,19 +314,43 @@ let ir3_stmt_to_arm
   (* 2 *)
   | AssignFieldStmt3 _ -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED")
   (* 3 *)
-  | MdCallStmt3 _ -> failwith ("MdCallStmt3: STATEMENT NOT IMPLEMENTED")
+  | MdCallStmt3 _ ->
+    (* Manage caller registers *)
+    (* Manage arguments!! *)
+    (* Get return value from a1 *)
+    let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
+    let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
+    failwith ("MdCallStmt3: STATEMENT NOT IMPLEMENTED")
   (* 1 *)
-  | ReturnStmt3 _ -> failwith ("ReturnStmt3: STATEMENT NOT IMPLEMENTED")
+  | ReturnStmt3 id ->
+    (* Use register allocator's method to force a1 later *)
+    let (return_reg, return_instr) = ir3_id3_to_arm asvs sm stmts stmt id in
+    let move_result = MOV("", false, "a1", RegOp(return_reg)) in
+    return_instr @ [move_result; B("", return_label)]
   (* 1 *)
-  | ReturnVoidStmt3 -> failwith ("ReturnVoidStmt3 STATEMENT NOT IMPLEMENTED")
+  | ReturnVoidStmt3 ->
+    [B("", return_label)]
 
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   let asvs = derive_active_spill_variable_set liveness_timeline in
   let localvars = mthd.localvars3 in
+  (* Callee stack & register management *)
+  let callee_save = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
+  let fp_base_offset = 24 in
+  let adjust_fp = ADD("", false, "fp", "sp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
+  let local_var_stack_size = 4 * List.length localvars in
+  let adjust_sp = SUB("", false, "sp", "fp", ImmedOp("#" ^ string_of_int (fp_base_offset + local_var_stack_size))) in
+  let exit_label_str = fresh_label() in
+  let exit_label_instr = Label(exit_label_str) in
+  let restore_sp = SUB("", false, "sp", "fp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
+  let callee_load = LDMFD (["fp"; "pc"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
+  let method_prefix = [callee_save; adjust_fp; adjust_sp] in
+  let method_suffix = [exit_label_instr; restore_sp; callee_load] in
+  (* Callee stack & register management END *)
   let sm = derive_stack_memory_map mthd.params3 localvars in
-  let ir3_stmt_partial = ir3_stmt_to_arm localvars asvs sm mthd.ir3stmts in
-  List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)
+  let ir3_stmt_partial = ir3_stmt_to_arm localvars asvs exit_label_str sm mthd.ir3stmts in
+  method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   let ir3_method_partial = ir3_method_to_arm classes in
