@@ -61,6 +61,7 @@ let fresh_string_label () =
 (* Contains the string literals and format specifiers *)
 let string_table = Hashtbl.create 100
 
+
 let add_idc3_to_string_table idc3 isPrintStmt =
   begin
     match idc3 with
@@ -646,7 +647,7 @@ let ir3_stmt_to_arm
         let movinstr = MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i))) in
         let blinstr = BL("","printf(PLT)") in
         [ldrinstr; movinstr; blinstr]
-      | _ -> failwith ("PrintStmt3: currently only supports string literals")
+      | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
     end
   (* 2 *)
   | AssignStmt3 (id, exp) ->
