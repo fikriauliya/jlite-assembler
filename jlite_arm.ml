@@ -52,9 +52,7 @@ let calc_var_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
 let get_field_shift (field_name: id3) (cdata: cdata3) = 0
 
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
-  let basic_blocks_map = Hashtbl.create 100 in
-  
-  let print_basic_blocks_map () =
+  let print_basic_blocks_map basic_blocks_map =
     Hashtbl.iter (fun k v ->
       println ("======================================================================");
       println ("Block #" ^ (string_of_int k) ^ ": ");
@@ -64,11 +62,11 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       println ("Out variable(s): " ^ (string_of_list v.out_variables (fun x -> x) ", "));
       println (string_of_list v.stmts string_of_ir3_stmt "\n");
       println ("======================================================================");
-    )
-      basic_blocks_map
+    ) basic_blocks_map;
   in
   (* Hashtbl.add basic_blocks_map "a" "b"; *)
   let derive_basic_blocks (mthd_stmts: ir3_stmt list) =
+    let basic_blocks_map = Hashtbl.create 100 in
     (* END block *)
     Hashtbl.add basic_blocks_map 0
       {
@@ -159,12 +157,14 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     split_into_blocks mthd_stmts [] 0 (-1) true false;
     println "fill_in_in_blocks";
     fill_in_in_blocks ();
+    basic_blocks_map
     (* [] *)
   in
-  derive_basic_blocks stmts;
+  let basic_blocks_map = derive_basic_blocks stmts in
+  (* calculate_in_out_variables; *)
 
   println "print_basic_blocks_map";
-  print_basic_blocks_map ();
+  print_basic_blocks_map (basic_blocks_map);
 
   [("", (0,0))]
 end
