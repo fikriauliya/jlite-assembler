@@ -60,7 +60,8 @@ let fresh_string_label () =
 (* Contains the string literals and format specifiers *)
 let string_table = Hashtbl.create 100
 
-
+(* Adds a string literal to the string table, adds an int literal format specifier
+ * if the is print stmt is true *)
 let add_idc3_to_string_table idc3 isPrintStmt =
   begin
     match idc3 with
@@ -75,6 +76,7 @@ let add_idc3_to_string_table idc3 isPrintStmt =
       ()
   end
 
+(* Adds a string literal to the string table if the expression contains a string literal *)
 let add_ir3_exp_to_string_table exp3 =
   begin
     match exp3 with
@@ -100,6 +102,9 @@ let add_ir3_exp_to_string_table exp3 =
       ()
   end
 
+(* Adds a string literal to the string table if the stmt contains an expression
+ * with a string literal or adds a int format specifier to the string table if
+ * it is a print stmt with an int or integer variable *)
 let add_ir3_stmt_to_string_table stmt3 =
   begin
     match stmt3 with
@@ -120,6 +125,7 @@ let add_ir3_stmt_to_string_table stmt3 =
       ()
   end
 
+(* Adds string literals and/or integer format specifier to the string table *)
 let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
   let rec helper stmts =
     begin
