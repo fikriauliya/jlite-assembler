@@ -754,14 +754,11 @@ let rec ir3_exp_to_arm
       (* TODO: Spill and allocate to register *)
       | Var3 id3 ->
         begin
-          let mov_arg_to_reg = load_variable stack_frame dst id3 in
+          let mov_arg_to_reg = unspill_variable stack_frame dst id3 rallocs in
           let curr_reg_var = var_in_register rallocs dst in
           match curr_reg_var with
           | Some v ->
-            if v <> id3 then
-              begin
-                store_variable stack_frame dst v @ mov_arg_to_reg
-              end
+            if v <> id3 then (spill_variable stack_frame dst v rallocs) @ mov_arg_to_reg
             else []
           | None -> mov_arg_to_reg
         end
@@ -880,7 +877,7 @@ let ir3_stmt_to_arm
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
-let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_decl3): (arm_instr list) =
+let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
   let rallocs = [
@@ -913,13 +910,11 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
   let type_layouts = List.map (derive_layout clist) clist in
   let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
   begin
-    (* Telling function that some arguments are on registers *)
-    let args = mthd.params3 in
-    let args_length = List.length args in
-    let nth_var = List.nth rallocs in
+    (* Telling this function that some arguments are on registers *)
+    (* Assuming 1st variable on a1, 2nd on a2 ..., 4th on a4 *)
     let set_nth_var n =
-      let (r, v) = (nth_var n) in
-      let (v_type, v_name) = List.nth mthd.params3 n in
+      let (_, v) = List.nth rallocs n in
+      let (_, v_name) = List.nth mthd.params3 n in
       v := Some v_name
     in
     let rec set_nth_below n curr =
@@ -927,24 +922,12 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
       else ()
     in
     let mthd_instr = method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
-    (set_nth_below args_length (args_length-1); mthd_instr)
+    (set_nth_below (min (List.length mthd.params3) 4) 0; mthd_instr)
   end
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   add_ir3_program_to_string_table (classes, main_method, methods);
-  let rallocs = [
-    "a1", ref None;
-    "a2", ref None;
-    "a3", ref None;
-    "a4", ref None;
-    "v1", ref None;
-    "v2", ref None;
-    "v3", ref None;
-    "v4", ref None;
-    "v5", ref None;
-    (* TODO: use other registers for variables? *)
-  ] in
-  let ir3_method_partial = ir3_method_to_arm classes rallocs in
+  let ir3_method_partial = ir3_method_to_arm classes in
   let dataSegment = PseudoInstr ".data" in
   let string_table_to_arm = Hashtbl.fold 
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
