@@ -1,30 +1,30 @@
-open Arm_structs
-open Ir3_structs
-open Jlite_structs
-open Printf
+    open Arm_structs
+    open Ir3_structs
+    open Jlite_structs
+    open Printf
 
-(*type memory_address_type = int*)
+    (*type memory_address_type = int*)
 
-(* Type corresponding to the position of an object inside a record
-  should be between –4095 and +4095, cf: Flexible offset syntax, p.4-9
-*)
-type memory_address_offset = int
+    (* Type corresponding to the position of an object inside a record
+      should be between –4095 and +4095, cf: Flexible offset syntax, p.4-9
+    *)
+    type memory_address_offset = int
 
-type liveness_timeline_type = ((id3 * (int * int)) list)
-(*
-type active_spill_variables_type = 
-  (* (active variable set, spill variable set) *)
-  ((id3 list) * (id3 list))
-*)
+    type liveness_timeline_type = ((id3 * (int * int)) list)
+    (*
+    type active_spill_variables_type = 
+      (* (active variable set, spill variable set) *)
+      ((id3 list) * (id3 list))
+    *)
 
-type reg_allocations = (reg * id3 option ref) list
+    type reg_allocations = (reg * id3 option ref) list
 
-(* variable name -> reserved memory address in stack
-type stack_memory_map_type =
-  ((id3 * memory_address_type) list)
-*)
+    (* variable name -> reserved memory address in stack
+    type stack_memory_map_type =
+      ((id3 * memory_address_type) list)
+    *)
 
-type type_layout =
+    type type_layout =
   (id3 * memory_address_offset) list
 
 
@@ -67,6 +67,7 @@ let add_idc3_to_string_table idc3 isPrintStmt =
     match idc3 with
     | StringLiteral3 str ->
       Hashtbl.add string_table str (fresh_string_label())
+    | Var3 _
     | IntLiteral3 _ ->
       if isPrintStmt then
         Hashtbl.add string_table "%i" (fresh_string_label())
@@ -696,6 +697,13 @@ let ir3_stmt_to_arm
         let label = Hashtbl.find string_table "%i" in
         let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
         let movinstr = MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i))) in
+        let blinstr = BL("","printf(PLT)") in
+        [ldrinstr; movinstr; blinstr]
+      | Var3 id3 ->
+        let label = Hashtbl.find string_table "%i" in
+        let (var_reg, var_instr) = ir3_id3_to_arm rallocs stack_frame stmts stmt id3 in
+        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
+        let movinstr = MOV("",false,"a2",RegOp(var_reg)) in
         let blinstr = BL("","printf(PLT)") in
         [ldrinstr; movinstr; blinstr]
       | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
