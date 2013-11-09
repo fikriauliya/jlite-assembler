@@ -139,7 +139,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
               };
             split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
           end
-          | IfStmt3 (_, label) | GoTo3 label -> begin
+          | IfStmt3 (_, label) -> begin
             (* println "IfStmt3 | GoTo3"; *)
             let next_block_id = (non_labeled_block_id - 1) in
             if (skip) then ()
