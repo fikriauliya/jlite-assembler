@@ -18,6 +18,8 @@ type basic_block_type = {
   stmts: ir3_stmt list;
   mutable in_blocks: int list;
   out_blocks: int list;
+  mutable in_variables: id3 list;
+  mutable out_variables: id3 list;
 }
 
 let println line = begin
@@ -58,6 +60,8 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       println ("Block #" ^ (string_of_int k) ^ ": ");
       println ("In block(s): " ^ (string_of_list v.in_blocks string_of_int ", "));
       println ("Out block(s): " ^ (string_of_list v.out_blocks string_of_int ", "));
+      println ("In variable(s): " ^ (string_of_list v.in_variables (fun x -> x) ", "));
+      println ("Out variable(s): " ^ (string_of_list v.out_variables (fun x -> x) ", "));
       println (string_of_list v.stmts string_of_ir3_stmt "\n");
       println ("======================================================================");
     )
@@ -70,7 +74,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       {
         stmts = [];
         in_blocks = [];
-        out_blocks = []
+        out_blocks = [];
+        in_variables = [];
+        out_variables = []
       };
 
     let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode skip = 
@@ -81,7 +87,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
           {
             stmts = stmts_accum;
             in_blocks = [];
-            out_blocks = [0]
+            out_blocks = [0];
+            in_variables = [];
+            out_variables = [];
           };
       | (stmt::rests) ->
         println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ 
@@ -94,7 +102,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
               {
                 stmts = stmts_accum;
                 in_blocks = [];
-                out_blocks = [(label :>int)]
+                out_blocks = [(label :>int)];
+                in_variables = [];
+                out_variables = [];
               };
             split_into_blocks rests [] (label:>int) non_labeled_block_id false false
           end
@@ -105,7 +115,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
               {
                 stmts = stmts_accum @ [stmt];
                 in_blocks = [];
-                out_blocks = [(label:> int)]
+                out_blocks = [(label:> int)];
+                in_variables = [];
+                out_variables = [];
               };
             split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
           end
@@ -118,7 +130,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
               {
                 stmts = stmts_accum @ [stmt];
                 in_blocks = [];
-                out_blocks = [(label:> int); next_block_id]
+                out_blocks = [(label:> int); next_block_id];
+                in_variables = [];
+                out_variables = [];
               };
             split_into_blocks rests [] labeled_block_id next_block_id true skip
           end
