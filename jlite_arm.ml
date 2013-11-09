@@ -231,8 +231,16 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
 
   let calculate_in_out_variables basic_blocks_map = 
     let get_succ_blocks (cur_block: basic_block_type): basic_block_type list = 
-      println ("get_succ_blocks of " ^ (string_of_int cur_block.block_id));
-      []
+      let cur_block_id = cur_block.block_id in
+      printf "%s" ("get_succ_blocks of " ^ (string_of_int cur_block_id) ^ ": ");
+      let res = Hashtbl.fold (fun k v ret -> 
+        if (List.exists (fun x -> x == cur_block_id) v.in_blocks) then
+          ret @ [v]
+        else 
+          ret
+      ) basic_blocks_map [] in
+      println (string_of_list res (fun x -> (string_of_int x.block_id)) ", ");
+      res
     in
     (* 
     true => no change in in_variables
