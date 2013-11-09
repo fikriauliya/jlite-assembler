@@ -817,6 +817,10 @@ let ir3_stmt_to_arm
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
+let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) = [
+  COM "Funcion: " ^ mthd.id3;
+]
+
 let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
@@ -837,7 +841,8 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
   let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
   let ir3_stmt_partial = ir3_stmt_to_arm clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in
-  method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
+  let md_comments = gen_md_comments mthd stack_frame in
+  method_prefix @ md_comments @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   add_ir3_program_to_string_table (classes, main_method, methods);
