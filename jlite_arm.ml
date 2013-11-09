@@ -176,9 +176,16 @@ let rec ir3_exp_to_arm
       match op with
       | BooleanOp bop ->
         begin
+          let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
+          let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+          let (dstreg, dstinstr) = get_assigned_register currstmt in
           match bop with
-          | "||"
-          | "&&"
+          | "||" ->
+            let instr = ORR("", false, dstreg, op1reg, RegOp(op2reg)) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
+          | "&&" ->
+            let instr = AND("", false, dstreg, op1reg, RegOp(op2reg)) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
           | _ -> failwith ("Boolean operand not supported")
         end
       | RelationalOp rop ->
@@ -240,17 +247,15 @@ let rec ir3_exp_to_arm
       match op with
       | UnaryOp op ->
         begin
+          let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc in
+          let (dstreg, dstinstr) = get_assigned_register currstmt in
           match op with
           | "!" ->
-            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc in
-            let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
             let cmpfalseinstr = CMP("", op1reg, ImmedOp("#0")) in
             let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#0")) in
             let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#1")) in
             (dstreg, op1instr @ dstinstr @ [cmpfalseinstr; mveqinstr; mvneinstr])
           | "-" ->
-            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc in
-            let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
             let revsubinstr = RSB("", false, dstreg, op1reg, ImmedOp("#0")) in
             (dstreg, op1instr @ dstinstr @ [revsubinstr])
           | _ -> failwith ("Unary operator not supported")
