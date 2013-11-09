@@ -27,12 +27,13 @@ type type_layout =
 
 type enhanced_stmt = {
   embedded_stmt: ir3_stmt;
-  def: id3 list;
-  use: id3 list;
+  defs: id3 list;
+  uses: id3 list;
 }
 
 (* statement lists, IN block ids, OUT block ids *)
 type basic_block_type = {
+  block_id: int;
   stmts: enhanced_stmt list;
   mutable in_blocks: int list;
   out_blocks: int list;
@@ -72,6 +73,11 @@ let calc_obj_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
 
 let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
   let print_basic_blocks_map basic_blocks_map =
+    let string_of_enhanced_stmt (e_stmt) =
+      (string_of_ir3_stmt e_stmt.embedded_stmt) ^ " | defs = [ " ^ 
+        (string_of_list e_stmt.defs (fun x -> x) ", ") ^ "] | uses = [ " ^ 
+        (string_of_list e_stmt.uses (fun x -> x) ", ") ^ "]"
+    in
     Hashtbl.iter (fun k (v:basic_block_type) ->
       println ("======================================================================");
       println ("Block #" ^ (string_of_int k) ^ ": ");
@@ -79,7 +85,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       println ("Out block(s): " ^ (string_of_list v.out_blocks string_of_int ", "));
       println ("In variable(s): " ^ (string_of_list v.in_variables (fun x -> x) ", "));
       println ("Out variable(s): " ^ (string_of_list v.out_variables (fun x -> x) ", "));
-     (* println (string_of_list v.stmts.embedded_stmt string_of_ir3_stmt "\n"); *)
+      println (string_of_list v.stmts string_of_enhanced_stmt "\n");
       println ("======================================================================");
     ) basic_blocks_map;
   in
@@ -93,28 +99,61 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
         in_blocks = [];
         out_blocks = [];
         in_variables = [];
-        out_variables = []
+        out_variables = [];
+        block_id = 0;
       };
 
     let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode skip = 
-      let to_enhanced_statements (stmts) = 
+      let ir3stmts_to_enhanced_stmts (stmts) = 
+        let get_uses_from_ir3exp(e: ir3_exp): (id3 list) = 
+          let get_uses_from_idc3 (idc3_val : idc3) = 
+            match idc3_val with
+              | Var3 id3_val -> [id3_val]
+              | _ -> []
+          in
+          match e with
+            | BinaryExp3 (_, idc3_1, idc3_2) -> (get_uses_from_idc3 idc3_1) @ (get_uses_from_idc3 idc3_2)
+            | UnaryExp3 (_, idc3_1) -> (get_uses_from_idc3 idc3_1)
+            | FieldAccess3 (id3_1, id3_2) -> [id3_1; id3_2]
+            | Idc3Expr (idc3_1) -> (get_uses_from_idc3 idc3_1)
+            | MdCall3 (id3_1, idc3s) -> [id3_1] @ (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
+            | ObjectCreate3 _ -> []
+            | _ -> []
+        in
         List.map (fun x -> 
+          let (calc_defs, calc_uses) = match x with
+            | IfStmt3 (e, _)  -> ([], (get_uses_from_ir3exp e))
+            | PrintStmt3 (Var3 res) -> ([], [res])
+            | AssignStmt3 (res, e) -> ([res], (get_uses_from_ir3exp e))
+            | AssignDeclStmt3 (_, res, e) -> ([res], (get_uses_from_ir3exp e))
+            | AssignFieldStmt3 (FieldAccess3 (res_v, res_f), e) -> ([], [res_v] @ (get_uses_from_ir3exp e))
+            | MdCallStmt3 e ->  ([], (get_uses_from_ir3exp e))
+            | ReturnStmt3 res ->  ([], [res])
+            (* The followings return empty *)
+            (* | Label3 label3 ->  *)
+            (* | GoTo3 label3  ->  *)
+            (* | ReadStmt3 id3 ->  *)
+            (* | ReturnVoidStmt3 ->  *)
+            | _ -> ([], [])
+          in
           {
             embedded_stmt = x;
-            def = [];
-            use = [];
-          }) stmts
+            defs = calc_defs;
+            uses = calc_uses;
+          }
+        ) stmts
       in
       let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
       match stmts with
       | [] -> 
         Hashtbl.add basic_blocks_map cur_block_id 
           {
-            stmts = to_enhanced_statements(stmts_accum);
+            stmts = ir3stmts_to_enhanced_stmts(stmts_accum);
             in_blocks = [];
             out_blocks = [0];
             in_variables = [];
             out_variables = [];
+            block_id = cur_block_id;
           };
       | (stmt::rests) ->
         println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ 
@@ -125,11 +164,12 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = to_enhanced_statements(stmts_accum);
+                stmts = ir3stmts_to_enhanced_stmts(stmts_accum);
                 in_blocks = [];
                 out_blocks = [(label :>int)];
                 in_variables = [];
                 out_variables = [];
+                block_id = cur_block_id;
               };
             split_into_blocks rests [] (label:>int) non_labeled_block_id false false
           end
@@ -138,11 +178,12 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = to_enhanced_statements(stmts_accum @ [stmt]);
+                stmts = ir3stmts_to_enhanced_stmts(stmts_accum @ [stmt]);
                 in_blocks = [];
                 out_blocks = [(label:> int)];
                 in_variables = [];
                 out_variables = [];
+                block_id = cur_block_id;
               };
             split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
           end
@@ -153,11 +194,12 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = to_enhanced_statements(stmts_accum @ [stmt]);
+                stmts = ir3stmts_to_enhanced_stmts(stmts_accum @ [stmt]);
                 in_blocks = [];
                 out_blocks = [(label:> int); next_block_id];
                 in_variables = [];
                 out_variables = [];
+                block_id = cur_block_id;
               };
             split_into_blocks rests [] labeled_block_id next_block_id true skip
           end
@@ -171,7 +213,6 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
 
     let fill_in_in_blocks () =
       Hashtbl.iter (fun k v ->
-        (* println (string_of_int k); *)
         let out_blocks = v.out_blocks in
         List.iter (fun x -> begin
           x.in_blocks <- (x.in_blocks @ [k]);
@@ -189,6 +230,31 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   in
 
   let calculate_in_out_variables basic_blocks_map = 
+    let get_succ_blocks (cur_block: basic_block_type): basic_block_type list = 
+      let cur_block_id = cur_block.block_id in
+      printf "%s" ("get_succ_blocks of " ^ (string_of_int cur_block_id) ^ ": ");
+      let res = Hashtbl.fold (fun k v ret -> 
+        if (List.exists (fun x -> x == cur_block_id) v.in_blocks) then
+          ret @ [v]
+        else 
+          ret
+      ) basic_blocks_map [] in
+      println (string_of_list res (fun x -> (string_of_int x.block_id)) ", ");
+      res
+    in
+    (* 
+    true => no change in in_variables
+    false => any changes in in_variables. Loop again
+     *)
+    Hashtbl.fold (fun k v ret ->
+      (* Skip EXIT block *)
+      if (k == 0) then (ret & true)
+      else 
+        let succ_blocks = (get_succ_blocks v) in
+        v.out_variables = [];
+        v.in_variables = [];
+        ret & true
+    ) basic_blocks_map true;
     basic_blocks_map
   in
     
@@ -196,7 +262,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   let calculated_blocks_map = calculate_in_out_variables basic_blocks_map in
 
   println "print_basic_blocks_map";
-  print_basic_blocks_map (basic_blocks_map);
+  print_basic_blocks_map (calculated_blocks_map);
 
   [("", (0,0))]
 end
