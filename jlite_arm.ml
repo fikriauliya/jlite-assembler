@@ -121,7 +121,6 @@ let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_progra
     end      
   in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
 
-
 (*
  * Calculate the size of a variable. In fact, every variable has size 4 :)
 *)
@@ -534,7 +533,16 @@ let ir3_stmt_to_arm
   (* 1 *)
   | ReadStmt3 _ -> failwith ("ReadStmt3: STATEMENT NOT IMPLEMENTED")
   (* 1 *)
-  | PrintStmt3 _ -> failwith ("PrintStmt3: STATEMENT NOT IMPLEMENTED")
+  | PrintStmt3 idc3 ->
+    begin
+      match idc3 with
+      | StringLiteral3 str ->
+        let label = Hashtbl.find string_table str in
+        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
+        let blinstr = BL("","printf(PLT)") in
+        [ldrinstr; blinstr]
+      | _ -> failwith ("PrintStmt3: currently only supports string literals")
+    end
   (* 2 *)
   | AssignStmt3 (id, exp) ->
     let (id_reg_dst, id_instr) = ir3_id3_partial stmt id in
@@ -586,5 +594,12 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
+  add_ir3_program_to_string_table (classes, main_method, methods);
   let ir3_method_partial = ir3_method_to_arm classes in
-  List.flatten (List.map ir3_method_partial (main_method :: methods))
+  let dataSegment = PseudoInstr ".data" in
+  let string_table_to_arm = Hashtbl.fold 
+    (fun k v r -> r @ [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")]) string_table [] in
+  let textSegment = PseudoInstr ".text." in
+  let mainExport = PseudoInstr ".global main" in
+  [dataSegment] @ string_table_to_arm @ [textSegment; mainExport] @
+  (List.flatten (List.map ir3_method_partial (main_method :: methods)))
