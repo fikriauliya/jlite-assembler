@@ -69,7 +69,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
         out_blocks = []
       };
 
-    let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode = 
+    let rec split_into_blocks stmts stmts_accum labeled_block_id non_labeled_block_id appending_mode skip = 
       let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
       match stmts with
       | [] -> 
@@ -84,30 +84,45 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
           (string_of_int ((List.length mthd_stmts) - (List.length stmts) + 1)) ^ " --> " ^ (string_of_ir3_stmt stmt));
         match stmt with
           | Label3 label -> begin 
-            Hashtbl.add basic_blocks_map cur_block_id 
+            if (skip) then ()
+            else 
+              Hashtbl.add basic_blocks_map cur_block_id 
               {
                 stmts = stmts_accum;
                 in_blocks = [];
                 out_blocks = [(label :>int)]
               };
-            split_into_blocks rests [] (label:>int) non_labeled_block_id false
+            split_into_blocks rests [] (label:>int) non_labeled_block_id false false
+          end
+          | GoTo3 label -> begin
+            if (skip) then ()
+            else 
+              Hashtbl.add basic_blocks_map cur_block_id 
+              {
+                stmts = stmts_accum @ [stmt];
+                in_blocks = [];
+                out_blocks = [(label:> int)]
+              };
+            split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
           end
           | IfStmt3 (_, label) | GoTo3 label -> begin
             (* println "IfStmt3 | GoTo3"; *)
             let next_block_id = (non_labeled_block_id - 1) in
-            Hashtbl.add basic_blocks_map cur_block_id 
+            if (skip) then ()
+            else 
+              Hashtbl.add basic_blocks_map cur_block_id 
               {
                 stmts = stmts_accum @ [stmt];
                 in_blocks = [];
                 out_blocks = [(label:> int); next_block_id]
               };
-            split_into_blocks rests [] next_block_id next_block_id true
+            split_into_blocks rests [] labeled_block_id next_block_id true skip
           end
           (* TODO: handle:
           | ReturnStmt3 of id3
           | ReturnVoidStmt3 *)
           | _ -> begin
-            split_into_blocks rests (stmts_accum @ [stmt]) labeled_block_id non_labeled_block_id appending_mode
+            split_into_blocks rests (stmts_accum @ [stmt]) labeled_block_id non_labeled_block_id appending_mode skip
           end
     in
 
@@ -123,7 +138,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     in
 
     println "derive_basic_blocks";
-    split_into_blocks mthd_stmts [] 0 (-1) true;
+    split_into_blocks mthd_stmts [] 0 (-1) true false;
     println "fill_in_in_blocks";
     fill_in_in_blocks ();
     (* [] *)
