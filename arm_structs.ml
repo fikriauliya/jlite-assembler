@@ -168,7 +168,7 @@ let string_of_arm_instr instr =
   | BL (c,l) -> "bl" ^ c ^ " " ^ l
   | BX (c,r) -> "bx" ^ c ^ " " ^ r
   | MUL m -> "mul" ^ string_of_multiply_instr_type m
-  | COM s -> "; " ^ s
+  | COM s -> "@ " ^ s
   | EMPTY -> ""
 
 let string_of_arm_prog p = 

@@ -72,7 +72,7 @@ let fresh_label () =
 
 let stringlabelcount = ref 0
 let fresh_string_label () =
-  (stringlabelcount := !stringlabelcount+1; "L" ^ (string_of_int !stringlabelcount))
+  (stringlabelcount := !stringlabelcount+1; "STR" ^ (string_of_int !stringlabelcount))
 
 (* Contains the string literals and format specifiers *)
 let string_table = Hashtbl.create 100
@@ -882,8 +882,8 @@ let ir3_stmt_to_arm
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
-let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) = [
-    EMPTY;
+let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
+  [
     COM ("Funcion " ^ mthd.id3);
     COM "Local variable offsets:";
   ]
@@ -907,7 +907,7 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
   ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
-  let callee_save = STMFD (["fp"; "lr"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
+  let callee_save = STMFD (["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "lr"]) in
   let fp_base_offset = 24 in
   let adjust_fp = ADD("", false, "fp", "sp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
   let local_var_stack_size = 4 * List.length localvars in
@@ -915,7 +915,8 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
   let exit_label_str = fresh_label() in
   let exit_label_instr = Label(exit_label_str) in
   let restore_sp = SUB("", false, "sp", "fp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
-  let callee_load = LDMFD (["fp"; "pc"; "v1"; "v2"; "v3"; "v4"; "v5"]) in
+  let callee_load = LDMFD (["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "pc"]) in
+  let method_header = [Label mthd.id3] in
   let method_prefix = [callee_save; adjust_fp; adjust_sp] in
   let method_suffix = [exit_label_instr; restore_sp; callee_load] in
   (* Callee stack & register management END *)
@@ -937,7 +938,7 @@ let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_
       if (curr < n) then (set_nth_var curr; set_nth_below n (curr+1))
       else ()
     in
-    let mthd_instr = method_prefix @ md_comments @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
+    let mthd_instr = method_header @ md_comments @ method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix in
     (set_nth_below args_length (args_length-1); mthd_instr)
   end
 
@@ -961,5 +962,10 @@ let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_progr
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
   let textSegment = PseudoInstr ".text" in
   let mainExport = PseudoInstr ".global main" in
-  [dataSegment] @ string_table_to_arm @ [textSegment; mainExport] @
-  (List.flatten (List.map ir3_method_partial (main_method :: methods)))
+      [dataSegment]
+    @ [EMPTY]
+    @ string_table_to_arm
+    @ [EMPTY]
+    @ [textSegment; mainExport]
+    @ (List.flatten (List.map ir3_method_partial (main_method :: methods)))
+
