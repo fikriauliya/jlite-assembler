@@ -502,6 +502,16 @@ let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): ar
   let str = STR("", "", src_reg, RegPreIndexed("fp", offset, false)) in
   [str]
 
+let spill_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
+  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = src_reg) rallocs in
+  let _ = (var_option := None) in
+  store_variable stack_frame src_reg var_name
+
+let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
+  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = dst_reg) rallocs in
+  let _ = (var_option := None) in
+  load_variable stack_frame dst_reg var_name
+
 (* 5 
 let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
   ("v1", [])
@@ -706,8 +716,19 @@ let rec ir3_exp_to_arm
       (* TODO: Replace with the address of string later *)
       | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
       (* TODO: Spill and allocate to register *)
-      | Var3 id3 -> [MOV("", false, dst, ImmedOp("#" ^ id3))]
-      (* TODO: Add information about arguments to table here if needed *)
+      | Var3 id3 ->
+        begin
+          let mov_arg_to_reg = load_variable stack_frame dst id3 in
+          let curr_reg_var = var_in_register rallocs dst in
+          match curr_reg_var with
+          | Some v ->
+            if v <> id3 then
+              begin
+                store_variable stack_frame dst v @ mov_arg_to_reg
+              end
+            else []
+          | None -> mov_arg_to_reg
+        end
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
       begin
@@ -823,7 +844,7 @@ let ir3_stmt_to_arm
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
-let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
+let ir3_method_to_arm (clist: cdata3 list) (rallocs: reg_allocations) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
   let rallocs = [
@@ -875,7 +896,19 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
   add_ir3_program_to_string_table (classes, main_method, methods);
-  let ir3_method_partial = ir3_method_to_arm classes in
+  let rallocs = [
+    "a1", ref None;
+    "a2", ref None;
+    "a3", ref None;
+    "a4", ref None;
+    "v1", ref None;
+    "v2", ref None;
+    "v3", ref None;
+    "v4", ref None;
+    "v5", ref None;
+    (* TODO: use other registers for variables? *)
+  ] in
+  let ir3_method_partial = ir3_method_to_arm classes rallocs in
   let dataSegment = PseudoInstr ".data" in
   let string_table_to_arm = Hashtbl.fold 
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
