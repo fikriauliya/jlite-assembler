@@ -58,13 +58,19 @@ let stringlabelcount = ref 0
 let fresh_string_label () =
   (stringlabelcount := !stringlabelcount+1; "L" ^ (string_of_int !stringlabelcount))
 
+(* Contains the string literals and format specifiers *)
 let string_table = Hashtbl.create 100
 
-let add_idc3_to_string_table idc3 =
+let add_idc3_to_string_table idc3 isPrintStmt =
   begin
     match idc3 with
     | StringLiteral3 str ->
       Hashtbl.add string_table str (fresh_string_label())
+    | IntLiteral3 _ ->
+      if isPrintStmt then
+        Hashtbl.add string_table "%i" (fresh_string_label())
+      else
+        ()
     | _ ->
       ()
   end
@@ -73,12 +79,12 @@ let add_ir3_exp_to_string_table exp3 =
   begin
     match exp3 with
     | BinaryExp3 (_,idc3,idc3') ->
-      add_idc3_to_string_table idc3;
-      add_idc3_to_string_table idc3'
+      add_idc3_to_string_table idc3 false;
+      add_idc3_to_string_table idc3' false
     | UnaryExp3 (_,idc3) ->
-      add_idc3_to_string_table idc3
+      add_idc3_to_string_table idc3 false
     | Idc3Expr (idc3) ->
-      add_idc3_to_string_table idc3
+      add_idc3_to_string_table idc3 false
     | MdCall3 (_,idc3list) ->
       let rec helper idc3s =
         begin
@@ -86,7 +92,7 @@ let add_ir3_exp_to_string_table exp3 =
           | [] ->
             ()
           | idc3::idc3s' ->
-            add_idc3_to_string_table idc3;
+            add_idc3_to_string_table idc3 false;
             helper idc3s'
         end
       in helper idc3list
@@ -100,7 +106,7 @@ let add_ir3_stmt_to_string_table stmt3 =
     | IfStmt3 (exp3,_) ->
       add_ir3_exp_to_string_table exp3
     | PrintStmt3 (idc3) ->
-      add_idc3_to_string_table idc3
+      add_idc3_to_string_table idc3 true
     | AssignStmt3 (_,exp3) ->
       add_ir3_exp_to_string_table exp3
     | AssignDeclStmt3 (_,_,exp3) ->
