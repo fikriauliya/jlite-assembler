@@ -217,24 +217,19 @@ let rec ir3_exp_to_arm
         end
       | AritmeticOp aop ->
         begin
+          let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
+          let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
+          let (dstreg, dstinstr) = get_assigned_register currstmt in
           match aop with
           | "+" ->
-            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
-            let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
-            let addinstr = ADD("", false, op1reg, op1reg, RegOp(op2reg)) in
-            (op1reg, op1instr @ op2instr @ [addinstr])
+            let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr])
           | "*" ->
-            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
-            let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
-            (* TODO: destination register dstreg can not be r15 *)
-            let (dstreg, dstinstr) = get_register asvs sm stmts currstmt in
-            let mulinstr = MUL("", false, dstreg, op1reg, op2reg) in
-            (op1reg, op1instr @ op2instr @ dstinstr @ [mulinstr])
+            let instr = MUL("", false, dstreg, op1reg, op2reg) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr]) 
           | "-" ->
-            let (op1reg, op1instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc1 in
-            let (op2reg, op2instr) = ir3_idc3_to_arm asvs sm stmts currstmt idc2 in
-            let subinstr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
-            (op1reg, op1instr @ op2instr @ [subinstr])
+            let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
+            (dstreg, op1instr @ op2instr @ dstinstr @ [instr]) 
           | _ -> failwith ("Arithmetic operand not supported")
         end
       | _ -> failwith ("Not operand of binary exp")
