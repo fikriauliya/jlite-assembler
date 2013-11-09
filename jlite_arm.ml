@@ -204,30 +204,64 @@ end
 let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type) =
   ([], [])
 
-(* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
+
 let derive_layout (clist: cdata3 list) ((cname,decls): cdata3): cname3 * type_layout =
-  let offset = ref 0 in
+  derive_precise_layout clist (cname,decls) 0 true
+
+(* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
+let derive_precise_layout (clist: cdata3 list) ((cname,decls): cdata3)
+    (starting_offset: int) (ascending_order: bool): cname3 * type_layout =derive_precise_layout
+  let offset = ref starting_offset in
+  let dir = if ascending_order then 1 else -1
   cname, List.map (fun (t,id) -> id,
     let off = !offset in
     begin
-      offset := !offset + (calc_var_size clist (t,id));
+      offset := !offset + (calc_var_size clist (t,id))*dir;
       off
     end) decls
+
+(*
+(* Takes the first n element in a list and returns two list: those elements and the remaining ones *)
+let rec vertical_split n ls =
+  if n <= 0 then [], ls else match ls with
+    | h::rest -> let frst,scnd = take_first (n-1) in h::frst, scnd
+    | [] -> [], []
+*)
 
 (*let derive_stack_memory_map (params: (var_decl3 list)) (localvars: (var_decl3 list)) =
   ([])*)
 let derive_stack_frame (clist: cdata3 list) (params: (var_decl3 list)) (localvars: (var_decl3 list)): type_layout =
-  let _, lay = derive_layout clist ("",params)
-  in lay
+(*  let first_4_params, rest_params = vertical_split 4 params
+  let _, rest_params_layout = derive_layout clist ("", rest_params) 4 true in
+  (* The first 4 parameters are passed in register; in order to be able to spill them on the stack, we reserve some space for them *)
+  let _, vars_layout = derive_layout clist ("", first_4_params @ localvars) -28 false in
+  rest_params_layout @ vars_layout*)
+  let _, params_layout = derive_layout clist ("", params) 4 true in
+  let _, vars_layout = derive_layout clist ("", localvars) -28 false in
+  params_layout @ vars_layout
 
 (* Returns the relative position of a field in an object of a given type
   TODO
   TODO also take the class as an argument
 *)
-let get_field_shift (cname: cname3) (type_layouts: (cname3 * type_layout) list) (field_name: id3) =
+let get_field_offset (cname: cname3) (type_layouts: (cname3 * type_layout) list) (field_name: id3) =
   let nam,lay = List.find (fun (nam,_) -> nam = cname) type_layouts in
   let id,offs = List.find (fun (id,offs) -> id = field_name) lay in
   offs
+
+let get_variable_offset (stack_frame: type_layout) (var_name: id3) =
+  let _, offset = List.find (fun (id,_) -> id = var_name) stack_frame
+  in offset
+
+let load_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3): arm_instr list =
+  let offset = get_variable_offset stack_frame var_name in
+  let lrd = LDR("", "", dst_reg, RegPreIndexed("fp", offset, false)) in
+  [ldr]
+
+let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): arm_instr list =
+  let offset = get_variable_offset stack_frame var_name in
+  let str = STR("", "", src_reg, RegPreIndexed("fp", offset, false)) in
+  [str]
 
 (* 5 *)
 let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
@@ -362,7 +396,7 @@ let rec ir3_exp_to_arm
     let (var_reg, var_instr) = ir3_id3_to_arm asvs stack_frame stmts currstmt var_id3 in
     let (dstreg, dstinstr) = get_assigned_register currstmt in
     let cname = cname_from_id3 localvars var_id3 in
-    let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_shift cname type_layouts field_name_id3, false))
+    let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name_id3, false))
       (* TODO: handle non-word fields; *)
       (* TODO: how to get the variable type? *)
     in dstreg, var_instr @ dstinstr @ [ldr_instr]
