@@ -204,11 +204,6 @@ end
 let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type) =
   ([], [])
 
-(*let derive_stack_memory_map (params: (var_decl3 list)) (localvars: (var_decl3 list)) =
-  ([])*)
-let derive_stack_frame (params: (var_decl3 list)) (localvars: (var_decl3 list)): type_layout =
-  ([])
-
 (* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
 let derive_layout (clist: cdata3 list) ((cname,decls): cdata3): cname3 * type_layout =
   let offset = ref 0 in
@@ -218,6 +213,12 @@ let derive_layout (clist: cdata3 list) ((cname,decls): cdata3): cname3 * type_la
       offset := !offset + (calc_var_size clist (t,id));
       off
     end) decls
+
+(*let derive_stack_memory_map (params: (var_decl3 list)) (localvars: (var_decl3 list)) =
+  ([])*)
+let derive_stack_frame (clist: cdata3 list) (params: (var_decl3 list)) (localvars: (var_decl3 list)): type_layout =
+  let _, lay = derive_layout clist ("",params)
+  in lay
 
 (* Returns the relative position of a field in an object of a given type
   TODO
@@ -440,7 +441,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let method_prefix = [callee_save; adjust_fp; adjust_sp] in
   let method_suffix = [exit_label_instr; restore_sp; callee_load] in
   (* Callee stack & register management END *)
-  let stack_frame = derive_stack_frame mthd.params3 localvars in
+  let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
   let ir3_stmt_partial = ir3_stmt_to_arm localvars asvs exit_label_str stack_frame type_layouts mthd.ir3stmts in
   method_prefix @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts)) @ method_suffix
