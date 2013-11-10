@@ -346,7 +346,7 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   (* [] *)
 end
 
-let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = begin
+let derive_liveness_timeline (basic_blocks_map) : liveness_timeline_type = begin
   let liveness_timeline_map = Hashtbl.create 100 in
 
   let get_all_blocks basic_blocks_map =
@@ -446,8 +446,6 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       basic_blocks_map
   in
     
-  let e_stmts = ir3stmts_to_enhanced_stmts stmts in
-  let basic_blocks_map = derive_basic_blocks e_stmts in
   let calculated_blocks_map = calculate_in_out_variables basic_blocks_map in
 
   println_debug "";
@@ -967,8 +965,9 @@ let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
   in *)
 
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
-
-  let liveness_timeline = derive_liveness_timeline mthd.ir3stmts in
+  let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
+  let basic_blocks_map = derive_basic_blocks e_stmts in
+  let liveness_timeline = derive_liveness_timeline basic_blocks_map in
 
   (*
     let () = print_string (string_of_int (List.length liveness_timeline)) in
