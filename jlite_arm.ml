@@ -67,7 +67,7 @@ type basic_block_type = {
 }
 
 let println line = begin
-  (*printf "%s\n" line;*)
+  printf "%s\n" line;
   (* TODO: remove all the printl's cluttering the code *)
 end
 
@@ -458,12 +458,15 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     println (string_of_enhanced_stmt curr);
     Id3Set.iter (fun x -> 
       println ("add: " ^ x);
-      Hashtbl.add liveness_timeline_map x 
-        {
-          variable_name = x;
-          start_line = curr.line_number;
-          end_line = curr.line_number;
-        }
+      if (Hashtbl.mem liveness_timeline_map x) then
+        ()
+      else
+        Hashtbl.add liveness_timeline_map x 
+          {
+            variable_name = x;
+            start_line = curr.line_number;
+            end_line = curr.line_number;
+          }
     ) diff;
 
     let diff2 = Id3Set.diff prev.stmt_in_variables curr.stmt_in_variables in
@@ -475,10 +478,17 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     curr
   ) (List.hd sorted_all_stmts) sorted_all_stmts in
 
+  (* Check what variable exists in the END block *)
+  let last_statement = (List.hd (List.rev sorted_all_stmts)) in
+  Id3Set.iter (fun x -> 
+    println x;
+    let ht = Hashtbl.find liveness_timeline_map x in
+    ht.end_line <- last_statement.line_number + 1;
+  ) last_statement.stmt_in_variables;
+
   println (string_of_list sorted_all_stmts string_of_enhanced_stmt "\n");
   Hashtbl.iter (fun k v -> 
-    println (k);
-    println ("start_line: " ^ (string_of_int v.start_line) ^ ", " ^ "end_line: " ^ (string_of_int v.end_line));
+    println (k  ^ ": start_line: " ^ (string_of_int v.start_line) ^ ", " ^ "end_line: " ^ (string_of_int v.end_line));
   ) liveness_timeline_map;
 
   liveness_timeline_map
