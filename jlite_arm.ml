@@ -659,7 +659,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     let () = clean_registers() in
     let free (regn,varn) = match !varn with None -> true | Some _ -> false in
     if List.exists free rallocs then
-      let (regn,varn) = List.find free rallocs in
+      let (regn,varn) = List.find free (List.rev rallocs) in
       let () = varn := Some var_id in
 (*      regn, load_variable stack_frame regn var_id *)
       regn, maybe_load regn var_id
