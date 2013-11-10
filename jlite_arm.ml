@@ -631,13 +631,17 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   
   let is_alive vid =
     (*
-    let () = print_string "OK" in
-    let () = List.iter (fun (id,_) -> print_string id) linfo.timelines in
+    let () = print_string ("OK " ^ vid ^ "  ") in
+    let () = Hashtbl.iter (fun n ln -> print_string ln.variable_name) linfo.timelines in
     *)
     (*
     let _, (_, death_line) = List.find (fun (id,_) -> id = vid) linfo.timelines in
     linfo.current_line <= death_line
     *)
+
+  (* TODO fixme: use a lifetime for "this" *)
+    if vid = "this" then true else
+
     let lness = Hashtbl.find linfo.timelines vid in (*(fun lness -> lness.variable_name = vid) in*)
     
     let () = if linfo.current_line <= lness.end_line
@@ -978,6 +982,7 @@ let eliminate_local_common_subexpression (basic_blocks_map) = begin
 end
 
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
+  
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
   let basic_blocks_map = derive_basic_blocks e_stmts in
   let optimized_blocks_map = eliminate_local_common_subexpression basic_blocks_map in
@@ -1041,10 +1046,17 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
       if (curr < n) then (set_nth_var curr; set_nth_below n (curr+1))
       else ()
     in
+(*
     let mthd_instr = method_header @ md_comments @ method_prefix
       @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
       @ method_suffix in
-    (set_nth_below (min (List.length mthd.params3) 4) 0; mthd_instr)
+    (set_nth_below (min (List.length mthd.params3) 4) 0; mthd_instr) 
+*)
+    let () = set_nth_below (min (List.length mthd.params3) 4) 0 in
+      method_header @ md_comments @ method_prefix
+      @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
+      @ method_suffix
+    
   end
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
