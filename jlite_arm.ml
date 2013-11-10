@@ -924,6 +924,8 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
         [ldrinstr; movinstr; blinstr]
       | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
     end
+  (* 1 *)
+  | AssignDeclStmt3 (_, id, exp)
   (* 2 *)
   | AssignStmt3 (id, exp) ->
     let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in (*ir3_id3_to_arm rallocs stack_frame stmts true in*) (* ir3_id3_partial stmt id in *)
@@ -933,8 +935,6 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
     else
       let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
       id_instr @ exp_instr @ [move_result] @ post_instr
-  (* 1 *)
-  | AssignDeclStmt3 _ -> failwith ("AssignDeclStmt3: STATEMENT NOT IMPLEMENTED")
   (* 2 *)
   | AssignFieldStmt3 (fla, exp) ->
     
