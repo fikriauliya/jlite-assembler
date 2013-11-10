@@ -66,9 +66,14 @@ type basic_block_type = {
   mutable out_variables: Id3Set.t;
 }
 
+(* Only be turned on for debugging *)
+let println_debug line = begin
+  (* printf "%s\n" line; *)
+  (* TODO: remove all the printl's cluttering the code *)
+end
+
 let println line = begin
   printf "%s\n" line;
-  (* TODO: remove all the printl's cluttering the code *)
 end
 
 let id3_set_of_list li = 
@@ -253,14 +258,14 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   in
   let print_basic_blocks_map basic_blocks_map =
     Hashtbl.iter (fun k (v:basic_block_type) ->
-      println ("======================================================================");
-      println ("Block #" ^ (string_of_int k) ^ ": ");
-      println ("In block(s): " ^ (string_of_list v.in_blocks string_of_int ", "));
-      println ("Out block(s): " ^ (string_of_list v.out_blocks string_of_int ", "));
-      println ("In variable(s): " ^ (string_of_list (Id3Set.elements v.in_variables) (fun x -> x) ", "));
-      println ("Out variable(s): " ^ (string_of_list (Id3Set.elements v.out_variables) (fun x -> x) ", "));
-      println (string_of_list v.stmts string_of_enhanced_stmt "\n");
-      println ("======================================================================");
+      println_debug ("======================================================================");
+      println_debug ("Block #" ^ (string_of_int k) ^ ": ");
+      println_debug ("In block(s): " ^ (string_of_list v.in_blocks string_of_int ", "));
+      println_debug ("Out block(s): " ^ (string_of_list v.out_blocks string_of_int ", "));
+      println_debug ("In variable(s): " ^ (string_of_list (Id3Set.elements v.in_variables) (fun x -> x) ", "));
+      println_debug ("Out variable(s): " ^ (string_of_list (Id3Set.elements v.out_variables) (fun x -> x) ", "));
+      println_debug (string_of_list v.stmts string_of_enhanced_stmt "\n");
+      println_debug ("======================================================================");
     ) basic_blocks_map;
   in
   (* Hashtbl.add basic_blocks_map "a" "b"; *)
@@ -291,7 +296,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             block_id = cur_block_id;
           };
       | (stmt::rests) ->
-        println ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ 
+        println_debug ("split_into_blocks, cur_block_id: " ^ (string_of_int cur_block_id) ^ ", line: " ^ 
           (string_of_int ((List.length mthd_stmts) - (List.length stmts) + 1)) ^ " --> " ^ (string_of_enhanced_stmt stmt));
         match stmt.embedded_stmt with
           | Label3 label -> begin 
@@ -323,7 +328,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
           end
           | IfStmt3 (_, label) -> begin
-            (* println "IfStmt3 | GoTo3"; *)
+            (* println_debug "IfStmt3 | GoTo3"; *)
             let next_block_id = (non_labeled_block_id - 1) in
             if (skip) then ()
             else 
@@ -356,9 +361,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
       ) basic_blocks_map
     in
 
-    println "derive_basic_blocks";
+    println_debug "derive_basic_blocks";
     split_into_blocks mthd_stmts [] 0 (-1) true false;
-    println "fill_in_in_blocks";
+    println_debug "fill_in_in_blocks";
     fill_in_in_blocks ();
     basic_blocks_map
     (* [] *)
@@ -367,14 +372,14 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   let rec calculate_in_out_variables basic_blocks_map = 
     let get_succ_blocks (cur_block: basic_block_type): basic_block_type list = 
       let cur_block_id = cur_block.block_id in
-      println ("get_succ_blocks of " ^ (string_of_int cur_block_id) ^ ": ");
+      println_debug ("get_succ_blocks of " ^ (string_of_int cur_block_id) ^ ": ");
       let res = Hashtbl.fold (fun k v ret -> 
         if (List.exists (fun x -> x == cur_block_id) v.in_blocks) then
           ret @ [v]
         else 
           ret
       ) basic_blocks_map [] in
-      println (string_of_list res (fun x -> (string_of_int x.block_id)) ", ");
+      println_debug (string_of_list res (fun x -> (string_of_int x.block_id)) ", ");
       res
     in
 
@@ -391,7 +396,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     true => any changes in in_variables. Loop again
      *)
     let res = Hashtbl.fold (fun k v ret ->
-      println ("===================== Calculate in/out variables for block #" ^ (string_of_int k) ^ " =============================");
+      println_debug ("===================== Calculate in/out variables for block #" ^ (string_of_int k) ^ " =============================");
       (* Skip EXIT block *)
       if (k == 0) then (ret || false)
       else 
@@ -401,15 +406,15 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
         let block_out_variables = calculate_out_variables succ_blocks_in_variables in
         let block_stmts = v.stmts in
         
-        println ("block_out_variables: " ^ (string_of_list (Id3Set.elements block_out_variables) (fun x -> x) ", "));
-        (* println "block_stmts: "; *)
-        (* println (string_of_list block_stmts string_of_enhanced_stmt " -> "); *)
+        println_debug ("block_out_variables: " ^ (string_of_list (Id3Set.elements block_out_variables) (fun x -> x) ", "));
+        (* println_debug "block_stmts: "; *)
+        (* println_debug (string_of_list block_stmts string_of_enhanced_stmt " -> "); *)
 
         let (block_in_variables, is_in_changed) = List.fold_left 
           (fun ((succ_blocks_in_variables: Id3Set.t), is_in_changed) stmt ->
             let cur_stmt_out = calculate_out_variables [succ_blocks_in_variables] in
             let cur_stmt_in = calculate_in_variables stmt.uses cur_stmt_out stmt.defs in
-            println ("processing statement: " ^ (string_of_enhanced_stmt stmt) ^ " | " ^
+            println_debug ("processing statement: " ^ (string_of_enhanced_stmt stmt) ^ " | " ^
               "cur_stmt_out: " ^ (string_of_list (Id3Set.elements cur_stmt_out) (fun x -> x) ", ") ^ " | " ^
               "prev_stmt_out: " ^ (string_of_list (Id3Set.elements stmt.stmt_out_variables) (fun x -> x) ", ") ^ " | " ^
               "cur_stmt_in: " ^ (string_of_list (Id3Set.elements cur_stmt_in) (fun x -> x) ", ") ^ " | " ^
@@ -418,7 +423,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             let is_new_change = 
               if (Id3Set.equal cur_stmt_in stmt.stmt_in_variables) then false 
               else begin
-                println (" *************************************************** -> Changed");
+                println_debug (" *************************************************** -> Changed");
                 true
               end
             in
@@ -443,9 +448,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   let basic_blocks_map = derive_basic_blocks e_stmts in
   let calculated_blocks_map = calculate_in_out_variables basic_blocks_map in
 
-  println "";
-  println "";
-  println "";
+  println_debug "";
+  println_debug "";
+  println_debug "";
   print_basic_blocks_map calculated_blocks_map;
 
   let all_blocks = get_all_blocks basic_blocks_map in
@@ -455,9 +460,9 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   let e = List.fold_left (fun prev curr ->
     let diff = Id3Set.diff curr.stmt_in_variables prev.stmt_in_variables in
 
-    println (string_of_enhanced_stmt curr);
+    println_debug (string_of_enhanced_stmt curr);
     Id3Set.iter (fun x -> 
-      println ("add: " ^ x);
+      println_debug ("add: " ^ x);
       if (Hashtbl.mem liveness_timeline_map x) then
         ()
       else
@@ -471,7 +476,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
 
     let diff2 = Id3Set.diff prev.stmt_in_variables curr.stmt_in_variables in
     Id3Set.iter (fun x -> 
-      println x;
+      println_debug x;
       let ht = Hashtbl.find liveness_timeline_map x in
       ht.end_line <- curr.line_number;
     ) diff2;
@@ -481,7 +486,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   (* Check what variable exists in the END block *)
   let last_statement = (List.hd (List.rev sorted_all_stmts)) in
   Id3Set.iter (fun x -> 
-    println x;
+    println_debug x;
     let ht = Hashtbl.find liveness_timeline_map x in
     ht.end_line <- last_statement.line_number + 1;
   ) last_statement.stmt_in_variables;
