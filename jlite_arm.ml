@@ -696,7 +696,7 @@ let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
 let rec cdata3_from_id3 (localvars: var_decl3 list) (vid: id3) =
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> | *)
-let rec cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
+let cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
 
@@ -877,8 +877,8 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let blinstr = BL("","_Znwj(PLT)") in
     ("a1", [movinstr; blinstr], [])
 
-let ir3_stmt_to_arm (linfo: lines_info)
-    (clist: cdata3 list) (localvars: var_decl3 list) (rallocs: reg_allocations) (return_label: label)
+let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
+    (localvars: var_decl3 list) (rallocs: reg_allocations) (return_label: label)
     (stack_frame: type_layout) (type_layouts: (cname3 * type_layout) list)
     (stmts: ir3_stmt list) (stmt: ir3_stmt): (arm_instr list) =
   let ir3_id3_partial = ir3_id3_to_arm linfo rallocs stack_frame stmts in
@@ -936,7 +936,28 @@ let ir3_stmt_to_arm (linfo: lines_info)
   (* 1 *)
   | AssignDeclStmt3 _ -> failwith ("AssignDeclStmt3: STATEMENT NOT IMPLEMENTED")
   (* 2 *)
-  | AssignFieldStmt3 (fla, exp) -> failwith ("AssignFieldStmt3: STATEMENT NOT IMPLEMENTED") 
+  | AssignFieldStmt3 (fla, exp) ->
+    
+    let obj_var, field_name = (match fla with
+      | FieldAccess3(o,f) -> o,f
+      | _ -> failwith "field assignment is not applied on a field access"
+    ) in
+    
+    let var_reg, var_instr = ir3_id3_partial stmt obj_var false in
+    let exp_reg, exp_instr, post_instr = ir3_exp_partial stmt exp in
+    
+    (*let typ, _ = List.find (fun (_,vname) -> vname = obj_var) localvars in
+    let clasname = (match typ with ObjectT n -> n | _ -> failwith "accessing field of a non-object variable") in*)
+    let cname = cname_from_id3 localvars obj_var in
+    
+    (*let _, lay = List.find (fun (clas,lay) -> clas = cname) type_layouts in
+    let offset = get_variable_offset lay field_name in*)
+    
+    let str = STR("", "", exp_reg,
+      RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name, false)) in
+    
+    var_instr @ exp_instr @ [str] @ post_instr
+    
   (* 3 *)
   | MdCallStmt3 exp ->
     let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in

@@ -19,7 +19,7 @@ Jesper
 (* 1 *)   | ReadStmt3
 (* 1 *)   | PrintStmt3
 
-lionel - lionel.parreaux@insa-lyon.fr
+Lionel - lionel.parreaux@insa-lyon.fr
 (* 4 *)   | FieldAccess3
 (* 2 *)   | AssignFieldStmt3
 (* 2 *)   | AssignStmt3
