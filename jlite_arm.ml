@@ -304,7 +304,7 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
             else 
               Hashtbl.add basic_blocks_map cur_block_id 
               {
-                stmts = stmts_accum;
+                stmts = stmts_accum @ [stmt];
                 in_blocks = [];
                 out_blocks = [(label :>int)];
                 in_variables = Id3Set.empty;
