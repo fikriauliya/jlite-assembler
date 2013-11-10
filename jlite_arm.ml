@@ -96,15 +96,13 @@ let add_idc3_to_string_table idc3 isPrintStmt =
   begin
     match idc3 with
     | StringLiteral3 str ->
-      Hashtbl.add string_table str (fresh_string_label())
-    | Var3 _
-    | IntLiteral3 _ ->
-      if isPrintStmt then
+      if Hashtbl.mem string_table str then () else
+        Hashtbl.add string_table str (fresh_string_label())
+    | Var3 _ | IntLiteral3 _ ->
+      if isPrintStmt && not (Hashtbl.mem string_table "%i") then
         Hashtbl.add string_table "%i" (fresh_string_label())
-      else
-        ()
-    | _ ->
-      ()
+      else ()
+    | _ -> ()
   end
 
 (* Adds a string literal to the string table if the expression contains a string literal *)
@@ -1048,9 +1046,10 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     in
     
     let () = set_nth_below (min (List.length mthd.params3) 4) 0 in
-      method_header @ md_comments @ method_prefix
-      @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
-      @ method_suffix
+    
+    method_header @ md_comments @ method_prefix
+    @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
+    @ method_suffix
     
   end
 
