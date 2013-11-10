@@ -957,16 +957,30 @@ let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
   @ List.map (fun (id,off) -> COM ("  " ^ id ^ " : " ^ (string_of_int off))) stack_frame
   @ [EMPTY]
 
-(* let eliminate_local_common_subexpression (basic_block_map) =
-    Hashtbl.iter (fun k v -> 
-      ()
-    ) basic_blocks_map;
-    basic_block_map
-  in *)
+let eliminate_local_common_subexpression (basic_blocks_map) = begin
+  (* Hashtbl.iter (fun k v -> 
+    List.map 
+      (fun stmt -> match stmt with
+        AssignStmt3 id3_res, e -> 
+          match e with
+            | BinaryExp3 (op, idc3_1, idc3_2) ->
+            | UnaryExp3 (op, idc3_1) -> 
+            (* TODO: need to match this?
+            | FieldAccess3 of id3 * id3
+            | Idc3Expr of idc3
+            | MdCall3 of id3 * (idc3 list) 
+            | ObjectCreate3 of string *)
+
+      )
+    v.stmts
+  ) basic_blocks_map; *)
+  basic_blocks_map
+end
 
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
   let basic_blocks_map = derive_basic_blocks e_stmts in
+  let optimized_blocks_map = eliminate_local_common_subexpression basic_blocks_map in
   let liveness_timeline = derive_liveness_timeline basic_blocks_map in
 
   (*
