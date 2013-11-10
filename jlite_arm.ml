@@ -477,8 +477,18 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
     let diff2 = Id3Set.diff prev.stmt_in_variables curr.stmt_in_variables in
     Id3Set.iter (fun x -> 
       println_debug x;
-      let ht = Hashtbl.find liveness_timeline_map x in
-      ht.end_line <- curr.line_number;
+
+      if (Hashtbl.mem liveness_timeline_map x) then begin
+        let ht = Hashtbl.find liveness_timeline_map x in
+        ht.end_line <- curr.line_number;
+      end else
+        (* Didn't see the def in prev statement. Must be class variable or params. Set start_line to -1 *)
+        Hashtbl.add liveness_timeline_map x 
+          {
+            variable_name = x;
+            start_line = -1;
+            end_line = curr.line_number;
+          }
     ) diff2;
     curr
   ) (List.hd sorted_all_stmts) sorted_all_stmts in
@@ -487,8 +497,17 @@ let derive_liveness_timeline (stmts: ir3_stmt list) : liveness_timeline_type = b
   let last_statement = (List.hd (List.rev sorted_all_stmts)) in
   Id3Set.iter (fun x -> 
     println_debug x;
-    let ht = Hashtbl.find liveness_timeline_map x in
-    ht.end_line <- last_statement.line_number + 1;
+    if (Hashtbl.mem liveness_timeline_map x) then begin
+      let ht = Hashtbl.find liveness_timeline_map x in
+      ht.end_line <- last_statement.line_number + 1;
+    end else
+      (* Didn't see the def in prev statement. Must be class variable or params. Set start_line to -1 *)
+      Hashtbl.add liveness_timeline_map x 
+        {
+          variable_name = x;
+          start_line = -1;
+          end_line = last_statement.line_number + 1;
+        }
   ) last_statement.stmt_in_variables;
 
   println (string_of_list sorted_all_stmts string_of_enhanced_stmt "\n");
