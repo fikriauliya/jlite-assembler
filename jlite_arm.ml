@@ -1046,12 +1046,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
       if (curr < n) then (set_nth_var curr; set_nth_below n (curr+1))
       else ()
     in
-(*
-    let mthd_instr = method_header @ md_comments @ method_prefix
-      @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
-      @ method_suffix in
-    (set_nth_below (min (List.length mthd.params3) 4) 0; mthd_instr) 
-*)
+    
     let () = set_nth_below (min (List.length mthd.params3) 4) 0 in
       method_header @ md_comments @ method_prefix
       @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
