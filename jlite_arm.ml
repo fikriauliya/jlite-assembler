@@ -961,7 +961,13 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       end
     in
     let actual_call = BL("", m_id) in
-    ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], [])
+    let result = ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], []) in
+    (* Set a1,a2,a3,a4 to free after function calls *)
+    let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
+    result
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
