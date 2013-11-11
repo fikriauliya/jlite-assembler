@@ -200,11 +200,11 @@ let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
 
 let register_of_var (rallocs: reg_allocations) (v: id3): (reg option) =
   try
-      let (reg, _) = List.find (fun (_, var) -> match !var with
-      | Some var_name -> var_name = v
-      | None -> false
-      ) rallocs in
-      (Some reg)
+    let (reg, _) = List.find (fun (_, var) -> match !var with
+    | Some var_name -> var_name = v
+    | None -> false
+    ) rallocs in
+    (Some reg)
   with
   | Not_found -> None
 
@@ -640,6 +640,14 @@ let get_variable_offset (stack_frame: type_layout) (var_name: id3) =
   let _, offset = List.find (fun (id,_) -> id = var_name) stack_frame
   in offset
 
+
+let make_move ((cnd,s,rd,op2): mov_instr_type) =
+  match op2 with RegOp r | ImmedOp r ->
+    let mov = MOV(cnd,s,rd,op2) in (*let () = println ("-->"^rd^" "^r) in*)
+    if r = rd then COM ("[useless] " ^ (string_of_arm_instr mov))
+    else mov
+
+
 let load_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3): arm_instr list =
   let offset = get_variable_offset stack_frame var_name in
   let ldr = LDR("", "", dst_reg, RegPreIndexed("fp", offset, false)) in
@@ -651,14 +659,28 @@ let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): ar
   [str]
 
 (* Unassign var_name from src_reg and generate the arm instruction for that as well. *)
-let spill_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
+let spill_variable (stack_frame: type_layout) (src_reg: reg) (*(var_name: id3)*) (rallocs: reg_allocations): arm_instr list =
+  let var_name =
+    match var_of_register rallocs src_reg with
+    | Some id3 -> id3
+    | None -> failwith "trying to spill an unassigned register!" in
   let _ = update_rallocs_var_at_reg rallocs None src_reg in
   store_variable stack_frame src_reg var_name
 
 (* Assign var_name to dst_reg and generate the arm instruction for that as well. *)
+(* Added behavior: if the variable is already in a register, it moves it to the dst register and updates rallocs *)
 let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
-  let _ = update_rallocs_var_at_reg rallocs (Some var_name) dst_reg in
-  load_variable stack_frame dst_reg var_name
+  let ret = match register_of_var rallocs var_name with
+  | Some reg ->
+    let (_, id3_ref) = List.find (fun (reg_name, _) -> reg_name = reg) rallocs in
+    let () = id3_ref := None in
+    [make_move("", false, dst_reg, RegOp(reg))]
+  | None ->
+    load_variable stack_frame dst_reg var_name
+  in let _ = update_rallocs_var_at_reg rallocs (Some var_name) dst_reg
+  in ret (*@ [COM "LOL!!!"]*)
+
+
 
 (* 5 
 let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
@@ -761,6 +783,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   match get_var_register vid with
   | Some (reg, _) -> reg, []
   | None -> (*let () = print_string (">>"^vid^"\n") in*) allocate_var vid
+
 
 (* 2 *)
 let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
@@ -927,17 +950,18 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
         begin
           match register_of_var rallocs id3 with
           (* Argument already in register, just move *)
-          | Some r -> if r = dst then []
+          | Some r -> if r = dst then (* [] *) [make_move("", false, dst, RegOp(r))]
             else
               begin
-                let mov_arg_to_reg = [MOV("", false, dst, RegOp(r))] in
+(*                let mov_arg_to_reg = [MOV("", false, dst, RegOp(r))] in*)
+                let mov_arg_to_reg = [make_move("", false, dst, RegOp(r))] in
                 match var_of_register rallocs dst with
                 | Some v ->
                   (* Some other variable exists in a_x register, spill and move *)
                   if v <> id3 then
                     let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
-                    (spill_variable stack_frame dst v rallocs) @ mov_arg_to_reg
-                  else []
+                    (spill_variable stack_frame dst rallocs) @ mov_arg_to_reg
+                  else (* [] *) [make_move("", false, v, RegOp(id3))]
                 | None ->
                   (* No other variable exists in a_x register, just move *)
                   let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
@@ -948,7 +972,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
             match var_of_register rallocs dst with
             | Some v ->
               (* Some other variable exists in a_x register, spill and load *)
-              if v <> id3 then (spill_variable stack_frame dst v rallocs) @ (unspill_variable stack_frame dst id3 rallocs)
+              if v <> id3 then (spill_variable stack_frame dst rallocs) @ (unspill_variable stack_frame dst id3 rallocs)
               else []
             | None ->
               (* No other variable exists in a_x register, just load *)
@@ -1024,6 +1048,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   (* 1 *)
   | PrintStmt3 idc3 ->
     begin
+      (* THIS IS NOT SAFE! one cannot simply load registers like that...
       match idc3 with
       | StringLiteral3 str ->
         let label = Hashtbl.find string_table str in
@@ -1044,6 +1069,51 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
         let blinstr = BL("","printf(PLT)") in
         [ldrinstr; movinstr; blinstr]
       | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
+      *)
+      
+      let request_reg r =
+        match var_of_register rallocs r with
+        | Some v ->
+          (* Some other variable exists in a_x register, spill and load *)
+          spill_variable stack_frame r rallocs
+        | None ->
+          (* No other variable exists in a_x register, just load *)
+          []
+      in
+      let set_a1 value =
+        let dst = "a1" in
+        let ldr = LDR("","",dst,LabelAddr("=" ^ (Hashtbl.find string_table value)))
+        in (request_reg dst) @ [ldr]
+      in
+      (match idc3 with
+      | StringLiteral3 str ->
+        set_a1 str
+      | IntLiteral3 i ->
+        (set_a1 "%i") @ (request_reg "a2") @ [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i)))]
+      | Var3 id3 ->
+        let dst = "a2" in
+        (set_a1 "%i") @
+        (
+          match var_of_register rallocs dst with
+          | Some v ->
+            (* Some other variable exists in a_x register, spill and load *)
+            if v <> id3 then
+              let spill = (spill_variable stack_frame dst rallocs) in
+              spill @ (unspill_variable stack_frame dst id3 rallocs)
+            else [make_move("", false, dst, RegOp(dst))]
+          | None ->
+            (* No other variable exists in a_x register, just load *)
+            unspill_variable stack_frame dst id3 rallocs
+        )
+        
+        (*TODO: support booleans?*)
+      | _ -> failwith ("PrintStmt3: currently only supports variables and string and int literals")
+      
+      ) @ [BL("","printf(PLT)")]
+      
+      (*spill_variable  
+      [ldrinstr; movinstr; BL("","printf(PLT)")]*)
+      
     end
   (* 1 *)
   | AssignDeclStmt3 (_, id, exp)
@@ -1237,10 +1307,13 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
   let ir3_stmt_partial stmt =
     let new_linfo = get_next_line() in
-    [ EMPTY;
+    let coms = [
+      EMPTY;
       COM("line "^(string_of_int linfo.current_line)^": " ^ (string_of_ir3_stmt stmt));
       COM("rallocs: " ^ (string_of_rallocs rallocs " "));
-    ] @ ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts sorted_all_stmts stmt
+    ] in
+    let ret = ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts sorted_all_stmts stmt in
+    coms @ ret
   in
   
   let md_comments = gen_md_comments mthd stack_frame in
