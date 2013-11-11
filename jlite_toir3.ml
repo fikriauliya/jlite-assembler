@@ -86,7 +86,7 @@ let rec jliteexpr_to_IR3Expr
           let newExpr = (Idc3Expr (IntLiteral3 0)) in 
           (iR3Expr_to_id3 newExpr t [] [] toid3)
         | UnaryExp (op,arg) -> 
-          let (argIR3,vars,stmts) = (helper arg true false) in
+          let (argIR3,vars,stmts) = (helper arg true true) in
           let argIdc3 = (iR3Expr_get_idc3 argIR3) in 
           let newExpr = UnaryExp3 (op,argIdc3) in 
           (iR3Expr_to_id3 newExpr t vars stmts toidc3)
