@@ -958,11 +958,9 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       begin
         match idc with
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
-        (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id3 false in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
-          (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
@@ -979,13 +977,13 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
       begin
-        let first_four_args = prepare_reg_args 0 args in
         let rest_args = prepare_stack_args 4 args in
-        first_four_args @ rest_args
+        let first_four_args = prepare_reg_args 0 args in
+        rest_args @ first_four_args
       end
     in
     let actual_call = BL("", m_id) in
-    let result = ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], []) in
+    let result = ("a1", (prepare_args args) @ [allocate_args_stack] @ [actual_call] @ [deallocate_args_stack], []) in
     (* Set a1,a2,a3,a4 to free after function calls *)
     let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
     let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
