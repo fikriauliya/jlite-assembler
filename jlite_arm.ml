@@ -1100,13 +1100,44 @@ let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
   @ [EMPTY]
 
 let eliminate_local_common_subexpression (basic_blocks_map) = begin
-  (* Hashtbl.iter (fun k v -> 
+  let compare_idc3 (idc3_1) (idc3_2) : bool =
+    match (idc3_1, idc3_2) with
+      | (IntLiteral3 v1, IntLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (BoolLiteral3 v1, BoolLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (StringLiteral3 v1, StringLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (Var3 v1, Var3 v2) -> (Pervasives.compare v1 v2) == 0
+  in
+  let append_into_cache_map op idc3_1 idc3_2 id3_name =
+    ()
+  in
+  let cache_map = Hashtbl.create 100 in
+  
+  Hashtbl.iter (fun k v -> 
     List.map 
       (fun stmt -> match stmt with
-        AssignStmt3 id3_res, e -> 
+        AssignStmt3 (id3_res, e) -> 
           match e with
-            | BinaryExp3 (op, idc3_1, idc3_2) ->
-            | UnaryExp3 (op, idc3_1) -> 
+            | BinaryExp3 (op, idc3_1, idc3_2) -> 
+              if Hashtbl.mem cache_map op then begin
+                (* Contain entry in the map *)
+                let filtered_ops = Hashtbl.find_all cache_map op in
+                let same_op = List.filter (fun (cache_idc3_1, cache_idc3_2, _) ->
+                  (compare_idc3 idc3_1 cache_idc3_1) && (compare_idc3 idc3_2 cache_idc3_2)
+                ) filtered_ops in
+                AssignStmt3 (id3_res, e)
+                (* if (List.size same_op) == 0 then begin
+                  append_into_cache_map op cache_idc3_1 cache_idc3_2 id3_res;
+                  AssignStmt3 (id3_res, e)
+                end else begin
+                  match same_op with
+                    | (_, _, id3_prev) -> AssignStmt3 id3_res id3_prev
+                end *)
+              end else begin
+                append_into_cache_map op idc3_1 idc3_2 id3_res;
+                AssignStmt3 (id3_res, e)
+              end
+                (* TODO: exclude variables that may be assigned more than once in the block *) 
+            (* | UnaryExp3 (op, idc3_1) ->  *)
             (* TODO: need to match this?
             | FieldAccess3 of id3 * id3
             | Idc3Expr of idc3
@@ -1114,8 +1145,8 @@ let eliminate_local_common_subexpression (basic_blocks_map) = begin
             | ObjectCreate3 of string *)
 
       )
-    v.stmts
-  ) basic_blocks_map; *)
+    v.stmts.embedded_stmt
+  ) basic_blocks_map;
   basic_blocks_map
 end
 
