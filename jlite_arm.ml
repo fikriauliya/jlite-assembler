@@ -242,9 +242,9 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
     match e with
       | BinaryExp3 (_, idc3_1, idc3_2) -> (get_uses_from_idc3 idc3_1) @ (get_uses_from_idc3 idc3_2)
       | UnaryExp3 (_, idc3_1) -> (get_uses_from_idc3 idc3_1)
-      | FieldAccess3 (id3_1, id3_2) -> [id3_1; id3_2]
+      | FieldAccess3 (id3_1, _) -> [id3_1]
       | Idc3Expr (idc3_1) -> (get_uses_from_idc3 idc3_1)
-      | MdCall3 (id3_1, idc3s) -> [id3_1] @ (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
+      | MdCall3 (_, idc3s) -> (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
       | ObjectCreate3 _ -> []
       | _ -> []
   in
