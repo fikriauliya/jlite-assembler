@@ -135,7 +135,7 @@ and jlitemdcall_to_IR3Expr
     | [] -> []
     | arg::tail_lst -> 
       let (argIR3,vars,stmts) = 
-        (jliteexpr_to_IR3Expr classid arg true false) in
+        (jliteexpr_to_IR3Expr classid arg true true) in
       let argIdc3 = (iR3Expr_get_idc3 argIR3) in
       (argIdc3,(vars,stmts)) ::  helper tail_lst
   in let res = ( helper args) in 
