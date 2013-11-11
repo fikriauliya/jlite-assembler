@@ -1115,6 +1115,24 @@ let eliminate_local_common_subexpression (basic_blocks_map) = begin
     Hashtbl.add cache_map op (idc3_1, idc3_2, var_name);
   in
   
+  let last_def_of (e_stmts: enhanced_stmt list) (id3_1: id3) (from_line_number: int) =
+    let prev_defs = List.fold_left
+      (fun res e_stmt -> 
+        if e_stmt.line_number < from_line_number then
+          if (Id3Set.mem id3_1 e_stmt.defs) then
+            res @ [e_stmt]
+          else
+            res
+        else
+          res
+      )
+    [] (List.rev e_stmts) in
+    if (List.length prev_defs == 0) then
+      -1
+    else 
+      (List.hd prev_defs).line_number
+  in
+
   Hashtbl.iter (fun k v -> 
     List.iter 
       (fun stmt -> 
@@ -1149,7 +1167,7 @@ let eliminate_local_common_subexpression (basic_blocks_map) = begin
               | FieldAccess3 of id3 * id3
               | Idc3Expr of idc3
               | MdCall3 of id3 * (idc3 list) 
-              | ObjectCreate3 of string *)
+               *)
             | _ -> ()
             end
           | _ -> ()
