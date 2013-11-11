@@ -312,14 +312,14 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
           else 
             Hashtbl.add basic_blocks_map cur_block_id 
             {
-              stmts = stmts_accum @ [stmt];
+              stmts = stmts_accum;
               in_blocks = [];
               out_blocks = [(label :>int)];
               in_variables = Id3Set.empty;
               out_variables = Id3Set.empty;
               block_id = cur_block_id;
             };
-          split_into_blocks rests [] (label:>int) non_labeled_block_id false false
+          split_into_blocks rests [stmt] (label:>int) non_labeled_block_id false false
         end
         | GoTo3 label -> begin
           if (skip) then ()
@@ -351,9 +351,19 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
             };
           split_into_blocks rests [] labeled_block_id next_block_id true skip
         end
-        (* TODO: handle:
-        | ReturnStmt3 of id3
-        | ReturnVoidStmt3 *)
+        | ReturnStmt3 _ | ReturnVoidStmt3 ->
+          if (skip) then ()
+          else 
+            Hashtbl.add basic_blocks_map cur_block_id 
+            {
+              stmts = stmts_accum @ [stmt];
+              in_blocks = [];
+              out_blocks = [0];
+              in_variables = Id3Set.empty;
+              out_variables = Id3Set.empty;
+              block_id = cur_block_id;
+            };
+          split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
         | _ -> begin
           split_into_blocks rests (stmts_accum @ [stmt]) labeled_block_id non_labeled_block_id appending_mode skip
         end
