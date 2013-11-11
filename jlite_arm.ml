@@ -156,8 +156,11 @@ let add_ir3_stmt_to_string_table stmt3 =
 
 (* Update content of r to be new_var *)
 let update_rallocs_var_at_reg (rallocs: reg_allocations) (new_var: id3 option) (r: reg) =
-  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in
-  let _ = (var_option := new_var) in ()
+  try
+    let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in
+    let _ = (var_option := new_var) in ()
+  with
+  | Not_found -> failwith ("update_rallocs_var_at_reg: Invalid register name: " ^ r)
 
 (* Adds string literals and/or integer format specifier to the string table *)
 let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
@@ -173,7 +176,10 @@ let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_progra
   in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
 
 let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
-  let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
+  try
+    let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
+  with
+  | Not_found -> failwith ("var_of_register: Invalid register name: " ^ r)
 
 let register_of_var (rallocs: reg_allocations) (v: id3): (reg option) =
   try
@@ -861,11 +867,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
   | MdCall3 (m_id, args) ->
     let mdargs_to_reg (idc: idc3) (dst: reg): (arm_instr list) = 
       match idc with
-      | IntLiteral3 i -> [MOV("", false, dst, ImmedOp("#" ^ string_of_int i))]
-      (* TODO: Replace with whatever way we represent boolean *)
-      | BoolLiteral3 b -> [MOV("", false, dst, ImmedOp("#" ^ string_of_bool b))]
-      (* TODO: Replace with the address of string later *)
-      | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
+      | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
       | Var3 id3 ->
         begin
           let spill_if_exists mov_instr =
@@ -905,7 +907,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       end
     in
     let rec prepare_reg_args arg_index args =
-      if (List.length args) <= arg_index then []
+      if (List.length args) <= arg_index || arg_index >= 4 then []
       else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int (arg_index+1)) @ (prepare_reg_args (arg_index + 1) args)
     in
     let rec prepare_stack_args arg_index args =
