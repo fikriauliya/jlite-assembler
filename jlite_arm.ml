@@ -721,7 +721,7 @@ let rec cdata3_from_id3 (localvars: var_decl3 list) (vid: id3) =
   in match t with ObjectT cname -> | *)
 let cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
   (*let () = println vid in*)
-  let _ = List.iter println  (List.map snd localvars) in
+  (*let _ = List.iter println  (List.map snd localvars) in*)
   
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
