@@ -248,7 +248,7 @@ let rec jlitestmts_to_IR3Stmts
         let (idIR3,idvars,idstmts) = 
           (jliteexpr_to_IR3Expr classid id false false) in 
         let (expr3,exprvars,exprstmts) = 
-          (jliteexpr_to_IR3Expr classid e false false) in 
+          (jliteexpr_to_IR3Expr classid e true true) in 
         let assignIR3 = (AssignFieldStmt3 (idIR3, expr3)) in 
         (idvars@exprvars, idstmts@exprstmts@[assignIR3])	
       | ReadStmt id -> 
