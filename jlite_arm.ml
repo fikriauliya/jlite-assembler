@@ -466,7 +466,7 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
     ) param_vars;
 
   let e = List.fold_left (fun prev curr ->
-    let diff = Id3Set.diff curr.stmt_in_variables prev.stmt_in_variables in
+    let diff = Id3Set.diff curr.stmt_out_variables prev.stmt_out_variables in
 
     println_debug (string_of_enhanced_stmt curr);
     Id3Set.iter (fun x -> 
@@ -482,7 +482,7 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
           }
     ) diff;
 
-    let diff2 = Id3Set.diff prev.stmt_in_variables curr.stmt_in_variables in
+    let diff2 = Id3Set.diff prev.stmt_out_variables curr.stmt_out_variables in
     Id3Set.iter (fun x -> 
       println_debug ("find " ^ x);
 
@@ -490,7 +490,16 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
       ht.end_line <- curr.line_number;
     ) diff2;
     curr
-  ) (List.hd sorted_all_stmts) sorted_all_stmts in
+  ) 
+    {
+      embedded_stmt= Label3 0;
+      stmt_out_variables= Id3Set.empty;
+      stmt_in_variables= Id3Set.empty;
+      defs= Id3Set.empty;
+      uses= Id3Set.empty;
+      line_number= -1;
+    } 
+    sorted_all_stmts in
 
   (* Check what variable exists in the END block *)
   let last_statement = (List.hd (List.rev sorted_all_stmts)) in
