@@ -2,6 +2,7 @@ open Arm_structs
 open Ir3_structs
 open Jlite_structs
 open Printf
+open List
 
 module Id3Set = Set.Make( 
   struct
@@ -1076,13 +1077,35 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
       
       let request_reg r =
         match var_of_register rallocs r with
-        | Some v ->
+        | Some v -> (*let () = println(">>"^r^" "^v) in*)
           (* Some other variable exists in a_x register, spill and load *)
-          spill_variable stack_frame r rallocs
+          (*spill_variable stack_frame r rallocs*)
+          store_variable stack_frame r v
         | None ->
           (* No other variable exists in a_x register, just load *)
           []
       in
+      let set_a1 value =
+        LDR("","","a1",LabelAddr("=" ^ (Hashtbl.find string_table value)))
+      in
+      let saves = flatten (map request_reg ["a1";"a2";"a3";"a4"]) in
+      let ret = saves @ (match idc3 with
+      | StringLiteral3 str ->
+        [set_a1 str]
+      | IntLiteral3 i ->
+        (set_a1 "%i") :: [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i)))]
+      | Var3 id3 ->
+        let dst = "a2" in
+        (set_a1 "%i") ::
+        (
+          match register_of_var rallocs id3 with
+          | Some r ->
+              [make_move("", false, dst, RegOp(r))]
+          | None ->
+              load_variable stack_frame dst id3
+        )
+        
+      (*
       let set_a1 value =
         let dst = "a1" in
         let ldr = LDR("","",dst,LabelAddr("=" ^ (Hashtbl.find string_table value)))
@@ -1102,19 +1125,6 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
             [make_move("", false, dst, RegOp(r))]
           | None ->
             load_variable stack_frame dst id3
-        )
-        (*
-        (
-          match var_of_register rallocs dst with
-          | Some v ->
-            (* Some other variable exists in a_x register, spill and load *)
-            if v <> id3 then
-              let spill = (spill_variable stack_frame dst rallocs) in
-              spill @ (unspill_variable stack_frame dst id3 rallocs)
-            else [make_move("", false, dst, RegOp(dst))]
-          | None ->
-            (* No other variable exists in a_x register, just load *)
-            unspill_variable stack_frame dst id3 rallocs
         )
         *)
         
