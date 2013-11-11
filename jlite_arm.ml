@@ -665,6 +665,8 @@ let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) 
   ("v1", [])
 *)
 
+let label3_to_arm lbl = "L" ^ (string_of_int lbl)
+
 (* 4 *)
 let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
   (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3) (*(no_spill_vars: id3 list)*)
@@ -1005,17 +1007,17 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   match stmt with
   (* 1 *)
   | Label3 label ->
-    let label_result = Label(string_of_int label) in
+    let label_result = Label(label3_to_arm label) in
     [label_result]
   (* 3 *)
   | IfStmt3 (exp, label) ->
     (* TODO: complete the implementation *)
     let (exp_reg, exp_instr, post_instr) = ir3_exp_partial stmt exp in
-    let if_result = B("eq", string_of_int(label)) in
+    let if_result = B("eq", label3_to_arm label) in
     exp_instr @ [if_result] @ post_instr
   (* 1 *)
   | GoTo3 label -> 
-    let goto_result = B("", (string_of_int label)) in
+    let goto_result = B("", (label3_to_arm  label)) in
     [goto_result]
   (* 1 *)
   | ReadStmt3 _ -> failwith ("ReadStmt3: STATEMENT NOT IMPLEMENTED")
