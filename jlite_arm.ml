@@ -40,14 +40,21 @@ type active_spill_variables_type =
 type reg_allocation = reg * id3 option ref
 type reg_allocations = (reg_allocation) list
 
-let string_of_ralloc ((reg, var): reg_allocation): string =
+let string_of_ralloc ((reg, var): reg_allocation): string option =
+  (*
   let idstr = match !var with
     | Some v -> v
     | None -> "None"
-  in reg ^ " " ^ idstr
+  in reg ^ " " ^ idstr*)
+  match !var with
+    | Some v -> Some (reg ^ "=" ^ v)
+    | None -> None
 
-let string_of_rallocs (rallocs: reg_allocations): string =
-  string_of_list rallocs string_of_ralloc "\n"
+let string_of_rallocs (rallocs: reg_allocations) (sep: string): string =
+  (*string_of_list rallocs string_of_ralloc sep*)
+  String.concat sep (List.flatten
+    (List.map (fun s -> match string_of_ralloc s with Some s -> [s] | _ -> []) rallocs)
+  )
 
 (* variable name -> reserved memory address in stack
 type stack_memory_map_type =
@@ -705,16 +712,20 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     (*if vid = "this" then true else*)
 
     let lness = Hashtbl.find linfo.timelines vid in (*(fun lness -> lness.variable_name = vid) in*)
-    
-    let () = if linfo.current_line <= lness.end_line
+    (*
+    let () = print_string (vid^" alive? "); if linfo.current_line <= lness.end_line
       then print_string ((string_of_int linfo.current_line) ^"\t"^ vid ^ " is dead!\n") else () in
-    
+    *)
     linfo.current_line <= lness.end_line
   in
   
   let clean_registers() =
     let _ = List.map (fun (regn,varn) -> match !varn with
-      | Some v -> if not (is_alive v) then varn := None else ()
+      | Some v ->
+        if not (is_alive v) then
+          let () = println("line "^(string_of_int linfo.current_line)^": freed "^regn^" from "^v) in
+          varn := None
+        else ()
       | None -> ()
     ) rallocs in ()
   in
@@ -1160,7 +1171,12 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (*; print_string (string_of_int linfo.current_line)*) in linfo in
     
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
-  let ir3_stmt_partial stmt = ir3_stmt_to_arm (get_next_line()) clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt in
+  let ir3_stmt_partial stmt =
+    let new_linfo = get_next_line() in
+    let com = COM("line "^(string_of_int linfo.current_line)^", rallocs: " ^ (string_of_rallocs rallocs " ")) in
+    com::
+    ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt
+  in
   
   let md_comments = gen_md_comments mthd stack_frame in
   begin
