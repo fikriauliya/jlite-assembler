@@ -680,7 +680,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     let () = clean_registers() in
     let free (regn,varn) = match !varn with None -> true | Some _ -> false in
     if List.exists free rallocs then
-      let (regn,varn) = List.find free rallocs in
+      let (regn,varn) = List.find free (List.rev rallocs) in
       let () = varn := Some var_id in
 (*      regn, load_variable stack_frame regn var_id *)
       regn, maybe_load regn var_id
@@ -881,6 +881,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     in
     let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
+    let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
       begin
         let first_four_args = prepare_reg_args 0 args in
@@ -890,7 +891,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     in
     let actual_call = BL("", m_id) in
     let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call], [caller_load])
+    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], [caller_load])
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
@@ -945,6 +946,8 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
         [ldrinstr; movinstr; blinstr]
       | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
     end
+  (* 1 *)
+  | AssignDeclStmt3 (_, id, exp)
   (* 2 *)
   | AssignStmt3 (id, exp) ->
     let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in (*ir3_id3_to_arm rallocs stack_frame stmts true in*) (* ir3_id3_partial stmt id in *)
@@ -954,8 +957,6 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
     else
       let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
       id_instr @ exp_instr @ [move_result] @ post_instr
-  (* 1 *)
-  | AssignDeclStmt3 _ -> failwith ("AssignDeclStmt3: STATEMENT NOT IMPLEMENTED")
   (* 2 *)
   | AssignFieldStmt3 (fla, exp) ->
     
