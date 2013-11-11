@@ -860,6 +860,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     in
     let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
+    let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
       begin
         let first_four_args = prepare_reg_args 0 args in
@@ -869,7 +870,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     in
     let actual_call = BL("", m_id) in
     let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call], [caller_load])
+    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], [caller_load])
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
