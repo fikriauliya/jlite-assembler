@@ -658,8 +658,8 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     linfo.current_line <= death_line
     *)
 
-  (* TODO fixme: use a lifetime for "this" *)
-    if vid = "this" then true else
+  (* TODONE fixme: use a lifetime for "this" *)
+    (*if vid = "this" then true else*)
 
     let lness = Hashtbl.find linfo.timelines vid in (*(fun lness -> lness.variable_name = vid) in*)
     
