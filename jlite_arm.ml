@@ -880,7 +880,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
-            let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
+            let instr = SUB("", false, dstreg, op1reg, RegOp(op2reg)) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Arithmetic operand not supported")
         end
@@ -897,8 +897,8 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
           match op with
           | "!" ->
             let cmpfalseinstr = CMP("", op1reg, ImmedOp("#0")) in
-            let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#0")) in
-            let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#1")) in
+            let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#1")) in
+            let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#0")) in
             (dstreg, op1instr @ dstinstr @ [cmpfalseinstr; mveqinstr; mvneinstr], [])
           | "-" ->
             let revsubinstr = RSB("", false, dstreg, op1reg, ImmedOp("#0")) in
