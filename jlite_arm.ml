@@ -217,7 +217,8 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
       | ObjectCreate3 _ -> []
       | _ -> []
   in
-  List.mapi (fun i x -> 
+  let i = ref (-1) in
+  List.map(fun x -> 
     let (calc_defs, calc_uses) = match x with
       | IfStmt3 (e, _)  -> ([], (get_uses_from_ir3exp e))
       | PrintStmt3 (Var3 res) -> ([], [res])
@@ -233,14 +234,15 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
       (* | ReturnVoidStmt3 ->  *)
       | _ -> ([], [])
     in
+    i:=!i+1;
     {
       embedded_stmt = x;
       defs = id3_set_of_list calc_defs;
       uses = id3_set_of_list calc_uses;
       stmt_in_variables = Id3Set.empty;
       stmt_out_variables = Id3Set.empty;
-      line_number = i;
-    }
+      line_number = !i;
+    };
   ) stmts
 end
 
