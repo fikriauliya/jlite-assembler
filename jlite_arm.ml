@@ -707,7 +707,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     let lness = Hashtbl.find linfo.timelines vid in (*(fun lness -> lness.variable_name = vid) in*)
     
     let () = if linfo.current_line <= lness.end_line
-      then print_string ((string_of_int linfo.current_line) ^"\t"^ vid ^ " died!!\n") else () in
+      then print_string ((string_of_int linfo.current_line) ^"\t"^ vid ^ " is dead!\n") else () in
     
     linfo.current_line <= lness.end_line
   in
@@ -745,7 +745,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   
   match get_var_register vid with
   | Some (reg, _) -> reg, []
-  | None -> allocate_var vid
+  | None -> (*let () = print_string (">>"^vid^"\n") in*) allocate_var vid
 
 (* 2 *)
 let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
@@ -755,14 +755,14 @@ let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   | IntLiteral3 i ->  "#" ^ (string_of_int i), [] (*TODO: replace this stub*)
   | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), [] (*TODO: replace this stub*)
   | StringLiteral3 s ->  "#" ^ s, [] (*TODO: replace this stub*)
-
+    
 (*
 let rec cdata3_from_id3 (localvars: var_decl3 list) (vid: id3) =
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> | *)
 let cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
   (*let () = println vid in*)
-  let _ = List.iter println  (List.map snd localvars) in
+  (*let _ = List.iter println  (List.map snd localvars) in*)
   
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
@@ -778,7 +778,27 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     -> ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id true
   | _ -> failwith "Tried to retrieve the assigned register from a non-assignment statement"
   
-  in match exp with
+  (*
+  and ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
+      (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3) (must_be_register: bool)
+      : (string * (arm_instr list)) =
+    let (arm,instr), is_reg = match vidc3 with
+      | Var3 vid -> (ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt vid false), true
+      | IntLiteral3 i ->  ("#" ^ (string_of_int i), []), false (*TODO: replace this stub*)
+      | BoolLiteral3 b ->  ("#" ^ (if b = true then "1" else "0"), []), false (*TODO: replace this stub*)
+      | StringLiteral3 s ->  ("#" ^ s, []), false (*TODO: replace this stub*)
+    in
+    if must_be_register and not(is_reg) then
+      let (dstreg, dstinstr) = get_assigned_register currstmt in
+      (*let (reg, reginstr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt  in*)
+      in reg, dstinstr @ instr
+    else arm, instr
+  *)
+  
+  in
+  
+  
+  match exp with
   | Idc3Expr (idc) ->
     let (reg, instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt idc in
     (reg, instr, [])
@@ -951,7 +971,13 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       end
     in
     let actual_call = BL("", m_id) in
-    ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], [])
+    let result = ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], []) in
+    (* Set a1,a2,a3,a4 to free after function calls *)
+    let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
+    result
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
