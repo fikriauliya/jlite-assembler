@@ -394,17 +394,16 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   (* [] *)
 end
 
+let get_all_blocks basic_blocks_map =
+  Hashtbl.fold (fun k v ret -> 
+    ret @ [v]
+  ) basic_blocks_map []
+
+let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
+  List.flatten (List.map (fun block -> block.stmts) blocks)
+
 let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : liveness_timeline_type = begin
   let liveness_timeline_map = Hashtbl.create 100 in
-
-  let get_all_blocks basic_blocks_map =
-    Hashtbl.fold (fun k v ret -> 
-      ret @ [v]
-    ) basic_blocks_map [] in
-
-  let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
-    List.flatten (List.map (fun block -> block.stmts) blocks)
-  in
 
   let print_basic_blocks_map basic_blocks_map =
     Hashtbl.iter (fun k (v:basic_block_type) ->
@@ -1165,7 +1164,11 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
   let basic_blocks_map = derive_basic_blocks e_stmts in
   let optimized_blocks_map = eliminate_local_common_subexpression basic_blocks_map in
-  let liveness_timeline = derive_liveness_timeline basic_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  let liveness_timeline = derive_liveness_timeline optimized_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  
+  let all_blocks = get_all_blocks optimized_blocks_map in
+  let all_stmts = get_all_stmts all_blocks in
+  let sorted_all_stmts = List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts) in
 
   (*
     let () = print_string (string_of_int (List.length liveness_timeline)) in
@@ -1217,7 +1220,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     [ EMPTY;
       COM("line "^(string_of_int linfo.current_line)^": " ^ (string_of_ir3_stmt stmt));
       COM("rallocs: " ^ (string_of_rallocs rallocs " "));
-    ] @ ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt
+    ] @ ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts sorted_all_stmts stmt
   in
   
   let md_comments = gen_md_comments mthd stack_frame in
@@ -1237,7 +1240,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     let () = set_nth_below (min (List.length mthd.params3) 4) 0 in
     
     method_header @ md_comments @ method_prefix
-    @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
+    @ (List.flatten (List.map ir3_stmt_partial sorted_all_stmts))
     @ method_suffix
     
   end
