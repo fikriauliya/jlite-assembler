@@ -8,7 +8,7 @@ class Main {
 		b = false;
 		b = ((!b) || false) && (b);
 		
-		if(help.add() == NULL ){
+		if (help.add() == NULL){
 			println("NULL return"); 
 		}
 		else{
@@ -40,6 +40,7 @@ class Compute {
    }   
    
    Compute add(){
+   	println("computing add\n");
 	return NULL;
    }
 }
