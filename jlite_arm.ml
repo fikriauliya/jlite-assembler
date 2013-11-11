@@ -720,18 +720,19 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   in
   
   let clean_registers() =
-    let _ = List.map (fun (regn,varn) -> match !varn with
+    List.flatten (List.map (fun (regn,varn) -> match !varn with
       | Some v ->
         if not (is_alive v) then
           let () = println("line "^(string_of_int linfo.current_line)^": freed "^regn^" from "^v) in
-          varn := None
-        else ()
-      | None -> ()
-    ) rallocs in ()
+          let () = varn := None in
+          [COM("freed "^regn^" from "^v)]
+        else []
+      | None -> []
+    ) rallocs)
   in
   
   let allocate_var var_id: (reg * (arm_instr list)) =
-    let () = clean_registers() in
+    let free_com_instrs = clean_registers() in
     let free (regn,varn) = match !varn with None -> true | Some _ -> false in
     if List.exists free rallocs then
       let (regn,varn) = List.find free (List.rev rallocs) in
@@ -749,9 +750,11 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
       let () = spilled_var_ref := Some var_id in
       
       spilled_reg,
-        store_instrs
+      (*
+      COM("LOL") ::
+      *)
+      free_com_instrs @ store_instrs @ maybe_load spilled_reg var_id
 (*      @ (load_variable stack_frame spilled_reg var_id) *)
-      @ maybe_load spilled_reg var_id
   in
   
   match get_var_register vid with
@@ -955,11 +958,9 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       begin
         match idc with
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
-        (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id3 false in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
-          (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
@@ -976,13 +977,13 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
       begin
-        let first_four_args = prepare_reg_args 0 args in
         let rest_args = prepare_stack_args 4 args in
-        first_four_args @ rest_args
+        let first_four_args = prepare_reg_args 0 args in
+        rest_args @ first_four_args
       end
     in
     let actual_call = BL("", m_id) in
-    let result = ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], []) in
+    let result = ("a1", (prepare_args args) @ [allocate_args_stack] @ [actual_call] @ [deallocate_args_stack], []) in
     (* Set a1,a2,a3,a4 to free after function calls *)
     let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
     let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
@@ -1093,7 +1094,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
 
 let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
   [
-    COM ("Funcion " ^ mthd.id3);
+    COM ("Function " ^ mthd.id3);
     COM "Local variable offsets:";
   ]
   @ List.map (fun (id,off) -> COM ("  " ^ id ^ " : " ^ (string_of_int off))) stack_frame
@@ -1213,9 +1214,10 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
   let ir3_stmt_partial stmt =
     let new_linfo = get_next_line() in
-    let com = COM("line "^(string_of_int linfo.current_line)^", rallocs: " ^ (string_of_rallocs rallocs " ")) in
-    com::
-    ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt
+    [ EMPTY;
+      COM("line "^(string_of_int linfo.current_line)^": " ^ (string_of_ir3_stmt stmt));
+      COM("rallocs: " ^ (string_of_rallocs rallocs " "));
+    ] @ ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt
   in
   
   let md_comments = gen_md_comments mthd stack_frame in
