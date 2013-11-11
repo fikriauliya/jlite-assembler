@@ -469,6 +469,7 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
     let diff = Id3Set.diff curr.stmt_out_variables prev.stmt_out_variables in
 
     println_debug (string_of_enhanced_stmt curr);
+    (* Store newly lived variable *)
     Id3Set.iter (fun x -> 
       println_debug ("add: " ^ x);
       if (Hashtbl.mem liveness_timeline_map x) then
@@ -482,13 +483,29 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
           }
     ) diff;
 
+    (* Store just died variable *)
     let diff2 = Id3Set.diff prev.stmt_out_variables curr.stmt_out_variables in
     Id3Set.iter (fun x -> 
-      println_debug ("find " ^ x);
+      println_debug ("find: " ^ x);
 
       let ht = Hashtbl.find liveness_timeline_map x in
       ht.end_line <- curr.line_number;
     ) diff2;
+
+    (* Store never used variable *)
+    (* Defined, but never become out *)
+    let diff3 = Id3Set.diff curr.defs curr.stmt_out_variables in
+    Id3Set.iter (fun x -> 
+      println_debug ("add: " ^ x);
+
+      Hashtbl.add liveness_timeline_map x 
+      {
+        variable_name = x;
+        start_line = curr.line_number;
+        end_line = curr.line_number;
+      }
+    ) diff3;
+
     curr
   ) 
     {
