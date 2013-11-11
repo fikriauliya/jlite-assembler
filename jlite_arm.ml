@@ -870,29 +870,34 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
       | Var3 id3 ->
         begin
-          let spill_if_exists mov_instr =
-            let spill_existing_var v = spill_variable stack_frame dst v rallocs in
-            let curr_var_in_reg = var_of_register rallocs dst in
-            match curr_var_in_reg with
-            | Some v ->
-              (* Some other variable exists in a_x register, spill and move *)
-              if v <> id3 then (spill_existing_var v) @ mov_instr
-              else []
-            | None ->
-              (* No other variable exists in a_x register, just move *)
-              mov_instr
-          in
           match register_of_var rallocs id3 with
           (* Argument already in register, just move *)
           | Some r -> if r = dst then []
             else
-              let mov_arg_to_reg = [MOV("", false, dst, RegOp(r))] in
-              let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
-              spill_if_exists mov_arg_to_reg
+              begin
+                let mov_arg_to_reg = [MOV("", false, dst, RegOp(r))] in
+                match var_of_register rallocs dst with
+                | Some v ->
+                  (* Some other variable exists in a_x register, spill and move *)
+                  if v <> id3 then
+                    let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
+                    (spill_variable stack_frame dst v rallocs) @ mov_arg_to_reg
+                  else []
+                | None ->
+                  (* No other variable exists in a_x register, just move *)
+                  let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
+                  mov_arg_to_reg
+              end
           (* Argument not in register yet, load *)
           | None ->
-            let load_arg_to_reg = unspill_variable stack_frame dst id3 rallocs in
-            spill_if_exists load_arg_to_reg
+            match var_of_register rallocs dst with
+            | Some v ->
+              (* Some other variable exists in a_x register, spill and load *)
+              if v <> id3 then (spill_variable stack_frame dst v rallocs) @ (unspill_variable stack_frame dst id3 rallocs)
+              else []
+            | None ->
+              (* No other variable exists in a_x register, just load *)
+              unspill_variable stack_frame dst id3 rallocs
         end
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
