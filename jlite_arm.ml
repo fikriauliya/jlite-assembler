@@ -1094,7 +1094,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
 
 let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
   [
-    COM ("Funcion " ^ mthd.id3);
+    COM ("Function " ^ mthd.id3);
     COM "Local variable offsets:";
   ]
   @ List.map (fun (id,off) -> COM ("  " ^ id ^ " : " ^ (string_of_int off))) stack_frame
