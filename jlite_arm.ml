@@ -319,14 +319,14 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
           else 
             Hashtbl.add basic_blocks_map cur_block_id 
             {
-              stmts = stmts_accum @ [stmt];
+              stmts = stmts_accum;
               in_blocks = [];
               out_blocks = [(label :>int)];
               in_variables = Id3Set.empty;
               out_variables = Id3Set.empty;
               block_id = cur_block_id;
             };
-          split_into_blocks rests [] (label:>int) non_labeled_block_id false false
+          split_into_blocks rests [stmt] (label:>int) non_labeled_block_id false false
         end
         | GoTo3 label -> begin
           if (skip) then ()
@@ -358,9 +358,19 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
             };
           split_into_blocks rests [] labeled_block_id next_block_id true skip
         end
-        (* TODO: handle:
-        | ReturnStmt3 of id3
-        | ReturnVoidStmt3 *)
+        | ReturnStmt3 _ | ReturnVoidStmt3 ->
+          if (skip) then ()
+          else 
+            Hashtbl.add basic_blocks_map cur_block_id 
+            {
+              stmts = stmts_accum @ [stmt];
+              in_blocks = [];
+              out_blocks = [0];
+              in_variables = Id3Set.empty;
+              out_variables = Id3Set.empty;
+              block_id = cur_block_id;
+            };
+          split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
         | _ -> begin
           split_into_blocks rests (stmts_accum @ [stmt]) labeled_block_id non_labeled_block_id appending_mode skip
         end
@@ -972,7 +982,13 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       end
     in
     let actual_call = BL("", m_id) in
-    ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], [])
+    let result = ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], []) in
+    (* Set a1,a2,a3,a4 to free after function calls *)
+    let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
+    let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
+    result
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
