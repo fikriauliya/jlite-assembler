@@ -37,7 +37,17 @@ type active_spill_variables_type =
   ((id3 list) * (id3 list))
 *)
 
-type reg_allocations = (reg * id3 option ref) list
+type reg_allocation = reg * id3 option ref
+type reg_allocations = (reg_allocation) list
+
+let string_of_ralloc ((reg, var): reg_allocation): string =
+  let idstr = match !var with
+    | Some v -> v
+    | None -> "None"
+  in reg ^ " " ^ idstr
+
+let string_of_rallocs (rallocs: reg_allocations): string =
+  string_of_list rallocs string_of_ralloc "\n"
 
 (* variable name -> reserved memory address in stack
 type stack_memory_map_type =
@@ -1131,6 +1141,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     in
     
     let () = set_nth_below (min (List.length mthd.params3) 4) 0 in
+    let _ = print_endline ("FUCK: " ^ string_of_rallocs rallocs) in
     
     method_header @ md_comments @ method_prefix
     @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
