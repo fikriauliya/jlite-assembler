@@ -154,6 +154,14 @@ let add_ir3_stmt_to_string_table stmt3 =
       ()
   end
 
+(* Update content of r to be new_var *)
+let update_rallocs_var_at_reg (rallocs: reg_allocations) (new_var: id3 option) (r: reg) =
+  try
+    let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in
+    let _ = (var_option := new_var) in ()
+  with
+  | Not_found -> failwith ("update_rallocs_var_at_reg: Invalid register name: " ^ r)
+
 (* Adds string literals and/or integer format specifier to the string table *)
 let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
   let rec helper stmts =
@@ -167,8 +175,21 @@ let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_progra
     end      
   in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
 
-let var_in_register (rallocs: reg_allocations) (r: reg): (id3 option) =
-  let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
+let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
+  try
+    let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
+  with
+  | Not_found -> failwith ("var_of_register: Invalid register name: " ^ r)
+
+let register_of_var (rallocs: reg_allocations) (v: id3): (reg option) =
+  try
+      let (reg, _) = List.find (fun (_, var) -> match !var with
+      | Some var_name -> var_name = v
+      | None -> false
+      ) rallocs in
+      (Some reg)
+  with
+  | Not_found -> None
 
 (*
  * Calculate the size of a variable. In fact, every variable has size 4 :)
@@ -603,14 +624,14 @@ let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): ar
   let str = STR("", "", src_reg, RegPreIndexed("fp", offset, false)) in
   [str]
 
+(* Unassign var_name from src_reg and generate the arm instruction for that as well. *)
 let spill_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
-  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = src_reg) rallocs in
-  let _ = (var_option := None) in
+  let _ = update_rallocs_var_at_reg rallocs None src_reg in
   store_variable stack_frame src_reg var_name
 
+(* Assign var_name to dst_reg and generate the arm instruction for that as well. *)
 let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
-  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = dst_reg) rallocs in
-  let _ = (var_option := Some var_name) in
+  let _ = update_rallocs_var_at_reg rallocs (Some var_name) dst_reg in
   load_variable stack_frame dst_reg var_name
 
 (* 5 
@@ -846,21 +867,37 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
   | MdCall3 (m_id, args) ->
     let mdargs_to_reg (idc: idc3) (dst: reg): (arm_instr list) = 
       match idc with
-      | IntLiteral3 i -> [MOV("", false, dst, ImmedOp("#" ^ string_of_int i))]
-      (* TODO: Replace with whatever way we represent boolean *)
-      | BoolLiteral3 b -> [MOV("", false, dst, ImmedOp("#" ^ string_of_bool b))]
-      (* TODO: Replace with the address of string later *)
-      | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
-      (* TODO: Spill and allocate to register *)
+      | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
       | Var3 id3 ->
         begin
-          let mov_arg_to_reg = unspill_variable stack_frame dst id3 rallocs in
-          let curr_reg_var = var_in_register rallocs dst in
-          match curr_reg_var with
-          | Some v ->
-            if v <> id3 then (spill_variable stack_frame dst v rallocs) @ mov_arg_to_reg
-            else []
-          | None -> mov_arg_to_reg
+          match register_of_var rallocs id3 with
+          (* Argument already in register, just move *)
+          | Some r -> if r = dst then []
+            else
+              begin
+                let mov_arg_to_reg = [MOV("", false, dst, RegOp(r))] in
+                match var_of_register rallocs dst with
+                | Some v ->
+                  (* Some other variable exists in a_x register, spill and move *)
+                  if v <> id3 then
+                    let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
+                    (spill_variable stack_frame dst v rallocs) @ mov_arg_to_reg
+                  else []
+                | None ->
+                  (* No other variable exists in a_x register, just move *)
+                  let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
+                  mov_arg_to_reg
+              end
+          (* Argument not in register yet, load *)
+          | None ->
+            match var_of_register rallocs dst with
+            | Some v ->
+              (* Some other variable exists in a_x register, spill and load *)
+              if v <> id3 then (spill_variable stack_frame dst v rallocs) @ (unspill_variable stack_frame dst id3 rallocs)
+              else []
+            | None ->
+              (* No other variable exists in a_x register, just load *)
+              unspill_variable stack_frame dst id3 rallocs
         end
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
@@ -875,7 +912,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       end
     in
     let rec prepare_reg_args arg_index args =
-      if (List.length args) <= arg_index then []
+      if (List.length args) <= arg_index || arg_index >= 4 then []
       else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int (arg_index+1)) @ (prepare_reg_args (arg_index + 1) args)
     in
     let rec prepare_stack_args arg_index args =
@@ -884,7 +921,6 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
        * Change if stack frame layout for parameter is changed. *)
       else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index)
     in
-    let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
@@ -895,8 +931,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       end
     in
     let actual_call = BL("", m_id) in
-    let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], [caller_load])
+    ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], [])
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
@@ -1053,15 +1088,17 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
-  let callee_save = STMFD (["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "lr"]) in
-  let fp_base_offset = 24 in
+  let saved_reg = ["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "lr"] in
+  let loaded_reg = ["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "pc"] in
+  let callee_save = STMFD (saved_reg) in
+  let fp_base_offset = 4 * ((List.length saved_reg) - 1) in
   let adjust_fp = ADD("", false, "fp", "sp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
   let local_var_stack_size = 4 * List.length localvars in
   let adjust_sp = SUB("", false, "sp", "fp", ImmedOp("#" ^ string_of_int (fp_base_offset + local_var_stack_size))) in
   let exit_label_str = fresh_label() in
   let exit_label_instr = Label(exit_label_str) in
   let restore_sp = SUB("", false, "sp", "fp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
-  let callee_load = LDMFD (["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "pc"]) in
+  let callee_load = LDMFD (loaded_reg) in
   let method_header = [Label mthd.id3] in
   let method_prefix = [callee_save; adjust_fp; adjust_sp] in
   let method_suffix = [exit_label_instr; restore_sp; callee_load] in
