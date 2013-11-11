@@ -881,7 +881,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
-            let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
+            let instr = SUB("", false, dstreg, op1reg, RegOp(op2reg)) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Arithmetic operand not supported")
         end
