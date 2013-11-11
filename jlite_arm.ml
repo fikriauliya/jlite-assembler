@@ -484,7 +484,7 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
 
     let diff2 = Id3Set.diff prev.stmt_in_variables curr.stmt_in_variables in
     Id3Set.iter (fun x -> 
-      println_debug x;
+      println_debug ("find " ^ x);
 
       let ht = Hashtbl.find liveness_timeline_map x in
       ht.end_line <- curr.line_number;
@@ -500,10 +500,13 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
     ht.end_line <- last_statement.line_number + 1;
   ) last_statement.stmt_in_variables;
 
+  println "=============================================================";
   println (string_of_list sorted_all_stmts string_of_enhanced_stmt "\n");
+  println "=============================================================";
   Hashtbl.iter (fun k v -> 
     println (k  ^ ": start_line: " ^ (string_of_int v.start_line) ^ ", " ^ "end_line: " ^ (string_of_int v.end_line));
   ) liveness_timeline_map;
+  println "=============================================================";
 
   liveness_timeline_map
   (*[("", (0,0))]*)
