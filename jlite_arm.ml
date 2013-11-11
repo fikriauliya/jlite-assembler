@@ -238,7 +238,7 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
       | ObjectCreate3 _ -> []
       | _ -> []
   in
-  let i = ref (-1) in
+  let i = ref (0) in
   List.map(fun x -> 
     let (calc_defs, calc_uses) = match x with
       | IfStmt3 (e, _)  -> ([], (get_uses_from_ir3exp e))
@@ -483,8 +483,8 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
       Hashtbl.add liveness_timeline_map param_var
       {
         variable_name = param_var;
-        start_line = -1;
-        end_line = -1;
+        start_line = 0;
+        end_line = 0;
       }
     ) param_vars;
 
