@@ -232,7 +232,8 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
       | ObjectCreate3 _ -> []
       | _ -> []
   in
-  List.mapi (fun i x -> 
+  let i = ref (-1) in
+  List.map(fun x -> 
     let (calc_defs, calc_uses) = match x with
       | IfStmt3 (e, _)  -> ([], (get_uses_from_ir3exp e))
       | PrintStmt3 (Var3 res) -> ([], [res])
@@ -248,14 +249,15 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
       (* | ReturnVoidStmt3 ->  *)
       | _ -> ([], [])
     in
+    i:=!i+1;
     {
       embedded_stmt = x;
       defs = id3_set_of_list calc_defs;
       uses = id3_set_of_list calc_uses;
       stmt_in_variables = Id3Set.empty;
       stmt_out_variables = Id3Set.empty;
-      line_number = i;
-    }
+      line_number = !i;
+    };
   ) stmts
 end
 
@@ -359,7 +361,7 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   (* [] *)
 end
 
-let derive_liveness_timeline (basic_blocks_map) : liveness_timeline_type = begin
+let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : liveness_timeline_type = begin
   let liveness_timeline_map = Hashtbl.create 100 in
 
   let get_all_blocks basic_blocks_map =
@@ -470,10 +472,21 @@ let derive_liveness_timeline (basic_blocks_map) : liveness_timeline_type = begin
   let all_stmts = get_all_stmts all_blocks in
   let sorted_all_stmts = List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts in
   
+  (* Add parameter variables into liveness *)
+  List.iter (fun param_var -> 
+      Hashtbl.add liveness_timeline_map param_var
+      {
+        variable_name = param_var;
+        start_line = -1;
+        end_line = -1;
+      }
+    ) param_vars;
+
   let e = List.fold_left (fun prev curr ->
-    let diff = Id3Set.diff curr.stmt_in_variables prev.stmt_in_variables in
+    let diff = Id3Set.diff curr.stmt_out_variables prev.stmt_out_variables in
 
     println_debug (string_of_enhanced_stmt curr);
+    (* Store newly lived variable *)
     Id3Set.iter (fun x -> 
       println_debug ("add: " ^ x);
       if (Hashtbl.mem liveness_timeline_map x) then
@@ -487,46 +500,56 @@ let derive_liveness_timeline (basic_blocks_map) : liveness_timeline_type = begin
           }
     ) diff;
 
-    let diff2 = Id3Set.diff prev.stmt_in_variables curr.stmt_in_variables in
+    (* Store just died variable *)
+    let diff2 = Id3Set.diff prev.stmt_out_variables curr.stmt_out_variables in
     Id3Set.iter (fun x -> 
-      println_debug x;
+      println_debug ("find: " ^ x);
 
-      if (Hashtbl.mem liveness_timeline_map x) then begin
-        let ht = Hashtbl.find liveness_timeline_map x in
-        ht.end_line <- curr.line_number;
-      end else
-        (* Didn't see the def in prev statement. Must be class variable or params. Set start_line to -1 *)
-        Hashtbl.add liveness_timeline_map x 
-          {
-            variable_name = x;
-            start_line = -1;
-            end_line = curr.line_number;
-          }
+      let ht = Hashtbl.find liveness_timeline_map x in
+      ht.end_line <- curr.line_number;
     ) diff2;
+
+    (* Store never used variable *)
+    (* Defined, but never become out *)
+    let diff3 = Id3Set.diff curr.defs curr.stmt_out_variables in
+    Id3Set.iter (fun x -> 
+      println_debug ("add: " ^ x);
+
+      Hashtbl.add liveness_timeline_map x 
+      {
+        variable_name = x;
+        start_line = curr.line_number;
+        end_line = curr.line_number;
+      }
+    ) diff3;
+
     curr
-  ) (List.hd sorted_all_stmts) sorted_all_stmts in
+  ) 
+    {
+      embedded_stmt= Label3 0;
+      stmt_out_variables= Id3Set.empty;
+      stmt_in_variables= Id3Set.empty;
+      defs= Id3Set.empty;
+      uses= Id3Set.empty;
+      line_number= -1;
+    } 
+    sorted_all_stmts in
 
   (* Check what variable exists in the END block *)
   let last_statement = (List.hd (List.rev sorted_all_stmts)) in
   Id3Set.iter (fun x -> 
     println_debug x;
-    if (Hashtbl.mem liveness_timeline_map x) then begin
-      let ht = Hashtbl.find liveness_timeline_map x in
-      ht.end_line <- last_statement.line_number + 1;
-    end else
-      (* Didn't see the def in prev statement. Must be class variable or params. Set start_line to -1 *)
-      Hashtbl.add liveness_timeline_map x 
-        {
-          variable_name = x;
-          start_line = -1;
-          end_line = last_statement.line_number + 1;
-        }
+    let ht = Hashtbl.find liveness_timeline_map x in
+    ht.end_line <- last_statement.line_number + 1;
   ) last_statement.stmt_in_variables;
 
+  println "=============================================================";
   println (string_of_list sorted_all_stmts string_of_enhanced_stmt "\n");
+  println "=============================================================";
   Hashtbl.iter (fun k v -> 
     println (k  ^ ": start_line: " ^ (string_of_int v.start_line) ^ ", " ^ "end_line: " ^ (string_of_int v.end_line));
   ) liveness_timeline_map;
+  println "=============================================================";
 
   liveness_timeline_map
   (*[("", (0,0))]*)
@@ -652,8 +675,8 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     linfo.current_line <= death_line
     *)
 
-  (* TODO fixme: use a lifetime for "this" *)
-    if vid = "this" then true else
+  (* TODONE fixme: use a lifetime for "this" *)
+    (*if vid = "this" then true else*)
 
     let lness = Hashtbl.find linfo.timelines vid in (*(fun lness -> lness.variable_name = vid) in*)
     
@@ -1034,7 +1057,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
   let basic_blocks_map = derive_basic_blocks e_stmts in
   let optimized_blocks_map = eliminate_local_common_subexpression basic_blocks_map in
-  let liveness_timeline = derive_liveness_timeline basic_blocks_map in
+  let liveness_timeline = derive_liveness_timeline basic_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
 
   (*
     let () = print_string (string_of_int (List.length liveness_timeline)) in
