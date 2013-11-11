@@ -20,7 +20,7 @@ class FieldAccessMain {
 class FieldAccess{ 
 	Int a;
 	Int func (Int x) {
-		return (6 + x);
+		return (6 + x + a);
     }
 }
 
