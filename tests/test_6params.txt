@@ -1,6 +1,6 @@
 class Main {
 
-	void main(){
+	void main () {
 		Int a; 
 		Compute help;
 		Bool b;
@@ -8,10 +8,10 @@ class Main {
 		b = false;
 		b = ((!b) || false) && (b);
 		
-		if (help.add() == NULL){
+		if (help.add() == NULL) {
 			println("NULL return\n"); 
 		}
-		else{
+		else {
 			println("Not NULL return\n"); 
 		}
 		

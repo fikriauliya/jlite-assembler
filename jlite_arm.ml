@@ -644,9 +644,15 @@ let get_variable_offset (stack_frame: type_layout) (var_name: id3) =
 let make_move ((cnd,s,rd,op2): mov_instr_type) =
   match op2 with RegOp r | ImmedOp r ->
     let mov = MOV(cnd,s,rd,op2) in (*let () = println ("-->"^rd^" "^r) in*)
-    if r = rd then COM ("[useless] " ^ (string_of_arm_instr mov))
+    if r = rd then COM ((*"[useless] " ^*) (string_of_arm_instr mov))
     else mov
 
+let reset_mtd_reg rallocs =
+  let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
+  ()
 
 let load_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3): arm_instr list =
   let offset = get_variable_offset stack_frame var_name in
@@ -1010,10 +1016,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let actual_call = BL("", m_id) in
     let result = ("a1", (prepare_args args) @ [allocate_args_stack] @ [actual_call] @ [deallocate_args_stack], []) in
     (* Set a1,a2,a3,a4 to free after function calls *)
-    let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
-    let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
-    let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
-    let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
+    let () = reset_mtd_reg rallocs in
     result
   (* 4 *)
   | ObjectCreate3 class_name ->
@@ -1085,14 +1088,22 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
         let ldr = LDR("","",dst,LabelAddr("=" ^ (Hashtbl.find string_table value)))
         in (request_reg dst) @ [ldr]
       in
-      (match idc3 with
+      let ret = (match idc3 with
       | StringLiteral3 str ->
         set_a1 str
       | IntLiteral3 i ->
         (set_a1 "%i") @ (request_reg "a2") @ [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i)))]
       | Var3 id3 ->
         let dst = "a2" in
-        (set_a1 "%i") @
+        (set_a1 "%i") @ (request_reg dst) @
+        (
+          match register_of_var rallocs id3 with
+          | Some r ->
+            [make_move("", false, dst, RegOp(r))]
+          | None ->
+            load_variable stack_frame dst id3
+        )
+        (*
         (
           match var_of_register rallocs dst with
           | Some v ->
@@ -1105,11 +1116,14 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
             (* No other variable exists in a_x register, just load *)
             unspill_variable stack_frame dst id3 rallocs
         )
+        *)
         
         (*TODO: support booleans?*)
       | _ -> failwith ("PrintStmt3: currently only supports variables and string and int literals")
       
-      ) @ [BL("","printf(PLT)")]
+      ) @ [BL("","printf(PLT)")] in
+      let () = reset_mtd_reg rallocs in
+      ret
       
       (*spill_variable  
       [ldrinstr; movinstr; BL("","printf(PLT)")]*)
