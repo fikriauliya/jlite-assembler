@@ -702,16 +702,20 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     (*if vid = "this" then true else*)
 
     let lness = Hashtbl.find linfo.timelines vid in (*(fun lness -> lness.variable_name = vid) in*)
-    
-    let () = if linfo.current_line <= lness.end_line
+    (*
+    let () = print_string (vid^" alive? "); if linfo.current_line <= lness.end_line
       then print_string ((string_of_int linfo.current_line) ^"\t"^ vid ^ " is dead!\n") else () in
-    
+    *)
     linfo.current_line <= lness.end_line
   in
   
   let clean_registers() =
     let _ = List.map (fun (regn,varn) -> match !varn with
-      | Some v -> if not (is_alive v) then varn := None else ()
+      | Some v ->
+        if not (is_alive v) then
+          let () = println("line "^(string_of_int linfo.current_line)^": freed "^regn^" from "^v) in
+          varn := None
+        else ()
       | None -> ()
     ) rallocs in ()
   in
