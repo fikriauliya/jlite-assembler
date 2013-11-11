@@ -559,12 +559,12 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
     curr
   ) 
     {
-      embedded_stmt= Label3 0;
-      stmt_out_variables= Id3Set.empty;
+      embedded_stmt= Label3 0; (* Dummy *)
+      stmt_out_variables= id3_set_of_list param_vars;
       stmt_in_variables= Id3Set.empty;
       defs= Id3Set.empty;
       uses= Id3Set.empty;
-      line_number= -1;
+      line_number= 0;
     } 
     sorted_all_stmts in
 
