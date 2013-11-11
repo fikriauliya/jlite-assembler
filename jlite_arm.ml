@@ -1141,7 +1141,6 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     in
     
     let () = set_nth_below (min (List.length mthd.params3) 4) 0 in
-    let _ = print_endline ("FUCK: " ^ string_of_rallocs rallocs) in
     
     method_header @ md_comments @ method_prefix
     @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
