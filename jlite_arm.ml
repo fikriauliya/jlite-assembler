@@ -65,7 +65,7 @@ type type_layout =
 (id3 * memory_address_offset) list
 
 type enhanced_stmt = {
-  embedded_stmt: ir3_stmt;
+  mutable embedded_stmt: ir3_stmt;
   defs: Id3Set.t;
   uses: Id3Set.t;
   mutable stmt_in_variables: Id3Set.t;
@@ -1107,45 +1107,54 @@ let eliminate_local_common_subexpression (basic_blocks_map) = begin
       | (StringLiteral3 v1, StringLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
       | (Var3 v1, Var3 v2) -> (Pervasives.compare v1 v2) == 0
   in
-  let append_into_cache_map op idc3_1 idc3_2 id3_name =
-    ()
-  in
+
+  (* Op -> idc3_1, idc3_2, var_name *)
   let cache_map = Hashtbl.create 100 in
+  let append_into_cache_map (e_stmts: enhanced_stmt list) (op: ir3_op) idc3_1 idc3_2 (var_name: id3) =
+    println_debug ("append_into_cache_map: " ^ var_name ^ " = " ^ (string_of_jlite_op op) ^ " " ^ (string_of_idc3 idc3_1) ^ " " ^ (string_of_idc3 idc3_2));
+    Hashtbl.add cache_map op (idc3_1, idc3_2, var_name);
+  in
   
   Hashtbl.iter (fun k v -> 
-    List.map 
-      (fun stmt -> match stmt with
-        AssignStmt3 (id3_res, e) -> 
-          match e with
-            | BinaryExp3 (op, idc3_1, idc3_2) -> 
-              if Hashtbl.mem cache_map op then begin
-                (* Contain entry in the map *)
-                let filtered_ops = Hashtbl.find_all cache_map op in
-                let same_op = List.filter (fun (cache_idc3_1, cache_idc3_2, _) ->
-                  (compare_idc3 idc3_1 cache_idc3_1) && (compare_idc3 idc3_2 cache_idc3_2)
-                ) filtered_ops in
-                AssignStmt3 (id3_res, e)
-                (* if (List.size same_op) == 0 then begin
-                  append_into_cache_map op cache_idc3_1 cache_idc3_2 id3_res;
-                  AssignStmt3 (id3_res, e)
+    List.iter 
+      (fun stmt -> 
+        println_debug ("Matching stmts " ^ (string_of_enhanced_stmt stmt));
+        match stmt.embedded_stmt with
+          AssignStmt3 (id3_res, e) -> 
+            begin
+            match e with
+              | BinaryExp3 (op, idc3_1, idc3_2) -> 
+                if Hashtbl.mem cache_map op then begin
+                  (* Contain entry in the map *)
+                  let filtered_ops = Hashtbl.find_all cache_map op in
+                  let same_ops = List.filter (fun (cache_idc3_1, cache_idc3_2, _) ->
+                    (compare_idc3 idc3_1 cache_idc3_1) && (compare_idc3 idc3_2 cache_idc3_2)
+                  ) filtered_ops in
+                  
+                  stmt.embedded_stmt <- AssignStmt3 (id3_res, e);
+                  if (List.length same_ops) == 0 then begin
+                    append_into_cache_map v.stmts op idc3_1 idc3_2 id3_res;
+                  end else
+                    match (List.hd same_ops) with
+                      | (_, _, id3_prev) ->
+                        (* TODO: Check last def of idc3_1 and idc3_2 *)
+                        (* Compare with last def of  *)
+                        stmt.embedded_stmt <- AssignStmt3 (id3_res, (Idc3Expr (Var3 id3_prev)))
                 end else begin
-                  match same_op with
-                    | (_, _, id3_prev) -> AssignStmt3 id3_res id3_prev
-                end *)
-              end else begin
-                append_into_cache_map op idc3_1 idc3_2 id3_res;
-                AssignStmt3 (id3_res, e)
-              end
-                (* TODO: exclude variables that may be assigned more than once in the block *) 
-            (* | UnaryExp3 (op, idc3_1) ->  *)
-            (* TODO: need to match this?
-            | FieldAccess3 of id3 * id3
-            | Idc3Expr of idc3
-            | MdCall3 of id3 * (idc3 list) 
-            | ObjectCreate3 of string *)
-
+                  append_into_cache_map v.stmts op idc3_1 idc3_2 id3_res;
+                end
+                  (* TODO: exclude variables that may be assigned more than once in the block *) 
+              (* | UnaryExp3 (op, idc3_1) ->  *)
+              (* TODO: need to match this?
+              | FieldAccess3 of id3 * id3
+              | Idc3Expr of idc3
+              | MdCall3 of id3 * (idc3 list) 
+              | ObjectCreate3 of string *)
+            | _ -> ()
+            end
+          | _ -> ()
       )
-    v.stmts.embedded_stmt
+    v.stmts
   ) basic_blocks_map;
   basic_blocks_map
 end
