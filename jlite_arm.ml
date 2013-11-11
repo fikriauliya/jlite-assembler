@@ -65,7 +65,7 @@ type type_layout =
 (id3 * memory_address_offset) list
 
 type enhanced_stmt = {
-  embedded_stmt: ir3_stmt;
+  mutable embedded_stmt: ir3_stmt;
   defs: Id3Set.t;
   uses: Id3Set.t;
   mutable stmt_in_variables: Id3Set.t;
@@ -394,17 +394,16 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   (* [] *)
 end
 
+let get_all_blocks basic_blocks_map =
+  Hashtbl.fold (fun k v ret -> 
+    ret @ [v]
+  ) basic_blocks_map []
+
+let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
+  List.flatten (List.map (fun block -> block.stmts) blocks)
+
 let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : liveness_timeline_type = begin
   let liveness_timeline_map = Hashtbl.create 100 in
-
-  let get_all_blocks basic_blocks_map =
-    Hashtbl.fold (fun k v ret -> 
-      ret @ [v]
-    ) basic_blocks_map [] in
-
-  let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
-    List.flatten (List.map (fun block -> block.stmts) blocks)
-  in
 
   let print_basic_blocks_map basic_blocks_map =
     Hashtbl.iter (fun k (v:basic_block_type) ->
@@ -958,11 +957,9 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       begin
         match idc with
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
-        (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id3 false in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
-          (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
@@ -979,13 +976,13 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
       begin
-        let first_four_args = prepare_reg_args 0 args in
         let rest_args = prepare_stack_args 4 args in
-        first_four_args @ rest_args
+        let first_four_args = prepare_reg_args 0 args in
+        rest_args @ first_four_args
       end
     in
     let actual_call = BL("", m_id) in
-    let result = ("a1", [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], []) in
+    let result = ("a1", (prepare_args args) @ [allocate_args_stack] @ [actual_call] @ [deallocate_args_stack], []) in
     (* Set a1,a2,a3,a4 to free after function calls *)
     let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
     let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
@@ -1103,22 +1100,62 @@ let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
   @ [EMPTY]
 
 let eliminate_local_common_subexpression (basic_blocks_map) = begin
-  (* Hashtbl.iter (fun k v -> 
-    List.map 
-      (fun stmt -> match stmt with
-        AssignStmt3 id3_res, e -> 
-          match e with
-            | BinaryExp3 (op, idc3_1, idc3_2) ->
-            | UnaryExp3 (op, idc3_1) -> 
-            (* TODO: need to match this?
-            | FieldAccess3 of id3 * id3
-            | Idc3Expr of idc3
-            | MdCall3 of id3 * (idc3 list) 
-            | ObjectCreate3 of string *)
+  let compare_idc3 (idc3_1) (idc3_2) : bool =
+    match (idc3_1, idc3_2) with
+      | (IntLiteral3 v1, IntLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (BoolLiteral3 v1, BoolLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (StringLiteral3 v1, StringLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (Var3 v1, Var3 v2) -> (Pervasives.compare v1 v2) == 0
+  in
 
+  (* Op -> idc3_1, idc3_2, var_name *)
+  let cache_map = Hashtbl.create 100 in
+  let append_into_cache_map (e_stmts: enhanced_stmt list) (op: ir3_op) idc3_1 idc3_2 (var_name: id3) =
+    println_debug ("append_into_cache_map: " ^ var_name ^ " = " ^ (string_of_jlite_op op) ^ " " ^ (string_of_idc3 idc3_1) ^ " " ^ (string_of_idc3 idc3_2));
+    Hashtbl.add cache_map op (idc3_1, idc3_2, var_name);
+  in
+  
+  Hashtbl.iter (fun k v -> 
+    List.iter 
+      (fun stmt -> 
+        println_debug ("Matching stmts " ^ (string_of_enhanced_stmt stmt));
+        match stmt.embedded_stmt with
+          AssignStmt3 (id3_res, e) -> 
+            begin
+            match e with
+              | BinaryExp3 (op, idc3_1, idc3_2) -> 
+                if Hashtbl.mem cache_map op then begin
+                  (* Contain entry in the map *)
+                  let filtered_ops = Hashtbl.find_all cache_map op in
+                  let same_ops = List.filter (fun (cache_idc3_1, cache_idc3_2, _) ->
+                    (compare_idc3 idc3_1 cache_idc3_1) && (compare_idc3 idc3_2 cache_idc3_2)
+                  ) filtered_ops in
+                  
+                  stmt.embedded_stmt <- AssignStmt3 (id3_res, e);
+                  if (List.length same_ops) == 0 then begin
+                    append_into_cache_map v.stmts op idc3_1 idc3_2 id3_res;
+                  end else
+                    match (List.hd same_ops) with
+                      | (_, _, id3_prev) ->
+                        (* TODO: Check last def of idc3_1 and idc3_2 *)
+                        (* Compare with last def of  *)
+                        stmt.embedded_stmt <- AssignStmt3 (id3_res, (Idc3Expr (Var3 id3_prev)))
+                end else begin
+                  append_into_cache_map v.stmts op idc3_1 idc3_2 id3_res;
+                end
+                  (* TODO: exclude variables that may be assigned more than once in the block *) 
+              (* | UnaryExp3 (op, idc3_1) ->  *)
+              (* TODO: need to match this?
+              | FieldAccess3 of id3 * id3
+              | Idc3Expr of idc3
+              | MdCall3 of id3 * (idc3 list) 
+              | ObjectCreate3 of string *)
+            | _ -> ()
+            end
+          | _ -> ()
       )
     v.stmts
-  ) basic_blocks_map; *)
+  ) basic_blocks_map;
   basic_blocks_map
 end
 
@@ -1127,7 +1164,11 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
   let basic_blocks_map = derive_basic_blocks e_stmts in
   let optimized_blocks_map = eliminate_local_common_subexpression basic_blocks_map in
-  let liveness_timeline = derive_liveness_timeline basic_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  let liveness_timeline = derive_liveness_timeline optimized_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  
+  let all_blocks = get_all_blocks optimized_blocks_map in
+  let all_stmts = get_all_stmts all_blocks in
+  let sorted_all_stmts = List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts) in
 
   (*
     let () = print_string (string_of_int (List.length liveness_timeline)) in
@@ -1179,7 +1220,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     [ EMPTY;
       COM("line "^(string_of_int linfo.current_line)^": " ^ (string_of_ir3_stmt stmt));
       COM("rallocs: " ^ (string_of_rallocs rallocs " "));
-    ] @ ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt
+    ] @ ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts sorted_all_stmts stmt
   in
   
   let md_comments = gen_md_comments mthd stack_frame in
@@ -1199,7 +1240,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     let () = set_nth_below (min (List.length mthd.params3) 4) 0 in
     
     method_header @ md_comments @ method_prefix
-    @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
+    @ (List.flatten (List.map ir3_stmt_partial sorted_all_stmts))
     @ method_suffix
     
   end
