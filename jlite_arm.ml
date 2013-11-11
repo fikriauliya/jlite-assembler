@@ -720,6 +720,9 @@ let rec cdata3_from_id3 (localvars: var_decl3 list) (vid: id3) =
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> | *)
 let cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
+  (*let () = println vid in*)
+  let _ = List.iter println  (List.map snd localvars) in
+  
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
 
@@ -1074,7 +1077,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (*; print_string (string_of_int linfo.current_line)*) in linfo in
     
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
-  let ir3_stmt_partial stmt = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt in
+  let ir3_stmt_partial stmt = ir3_stmt_to_arm (get_next_line()) clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt in
   
   let md_comments = gen_md_comments mthd stack_frame in
   begin
