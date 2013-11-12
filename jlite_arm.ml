@@ -476,8 +476,8 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     "v3", ref None;
     "v4", ref None;
     "v5", ref None;
-    "sb", ref None; (* v6 Stack base / register variable 6 *)
-    "sl", ref None; (* v7 Stack limit / register variable 7 *)
+    "v6", ref None; (* sb/v6: Stack base / register variable 6 *)
+    "v7", ref None; (* sl/v7 Stack limit / register variable 7 *)
   ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
