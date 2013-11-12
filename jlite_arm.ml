@@ -31,7 +31,7 @@ let add_idc3_to_string_table idc3 isPrintStmt =
     | StringLiteral3 str ->
       if Hashtbl.mem string_table (str ^ "\\n") then () else
         Hashtbl.add string_table (str ^ "\\n") (fresh_string_label())
-    | Var3 _ | IntLiteral3 _ ->
+    | Var3 _ | IntLiteral3 _ | BoolLiteral3 _ ->
       if isPrintStmt && not (Hashtbl.mem string_table "%i\\n") then
         Hashtbl.add string_table "%i\\n" (fresh_string_label())
       else ()
@@ -195,16 +195,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
             (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr], []) in
           match rop with
           | "==" ->
-            begin
-            match idc2 with
-            | BoolLiteral3 _ ->
-              let (op1reg, op1instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt idc1 in
-              let (op2reg, op2instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt idc2 in
-              let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
-              (op1reg, op1instr @ op2instr @ [eqinstr], [])
-            | _ ->  
-              relationalOpHelper "eq" "ne"
-            end
+            relationalOpHelper "eq" "ne"
           | "<" ->
             relationalOpHelper "lt" "ge"
           | "<=" ->
@@ -359,10 +350,17 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
     [label_result]
   (* 3 *)
   | IfStmt3 (exp, label) ->
+    begin
+      match exp with
+      | BinaryExp3 (RelationalOp "==", idc1, (BoolLiteral3 false)) -> 
+        let (op1reg, op1instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts stmt idc1 in
+        let cmpinstr = CMP("", op1reg, ImmedOp("#0")) in
+        let beqinstr = B("eq", label3_to_arm label) in
+        op1instr @ [cmpinstr] @ [beqinstr]
+      | _ -> failwith ("Expression of if-stmt does not follow the format op1 == false")
+    end
     (* TODO: complete the implementation *)
-    let (exp_reg, exp_instr, post_instr) = ir3_exp_partial stmt exp in
-    let if_result = B("eq", label3_to_arm label) in
-    exp_instr @ [if_result] @ post_instr
+    (* let (exp_reg, exp_instr, post_instr) = ir3_exp_partial stmt exp in *)
   (* 1 *)
   | GoTo3 label -> 
     let goto_result = B("", (label3_to_arm  label)) in
@@ -381,6 +379,9 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
         [set_a1 (str ^ "\\n")]
       | IntLiteral3 i ->
         (set_a1 "%i\\n") :: [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i)))]
+      | BoolLiteral3 b ->
+        let int_of_bool b = if b == true then 1 else 0 in
+        (set_a1 "%i\\n") :: [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int (int_of_bool b))))]
       | Var3 id3 ->
         let dst = "a2" in
         (set_a1 "%i\\n") ::
