@@ -196,16 +196,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
             (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr], []) in
           match rop with
           | "==" ->
-            begin
-            match idc2 with
-            | BoolLiteral3 _ ->
-              let (op1reg, op1instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt idc1 in
-              let (op2reg, op2instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt idc2 in
-              let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
-              (op1reg, op1instr @ op2instr @ [eqinstr], [])
-            | _ ->  
-              relationalOpHelper "eq" "ne"
-            end
+            relationalOpHelper "eq" "ne"
           | "<" ->
             relationalOpHelper "lt" "ge"
           | "<=" ->
@@ -362,10 +353,17 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
     [label_result]
   (* 3 *)
   | IfStmt3 (exp, label) ->
+    begin
+      match exp with
+      | BinaryExp3 (RelationalOp "==", idc1, (BoolLiteral3 false)) -> 
+        let (op1reg, op1instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts stmt idc1 in
+        let cmpinstr = CMP("", op1reg, ImmedOp("#0")) in
+        let beqinstr = B("eq", label3_to_arm label) in
+        op1instr @ [cmpinstr] @ [beqinstr]
+      | _ -> failwith ("Expression of if-stmt does not follow the format op1 == false")
+    end
     (* TODO: complete the implementation *)
-    let (exp_reg, exp_instr, post_instr) = ir3_exp_partial stmt exp in
-    let if_result = B("eq", label3_to_arm label) in
-    exp_instr @ [if_result] @ post_instr
+    (* let (exp_reg, exp_instr, post_instr) = ir3_exp_partial stmt exp in *)
   (* 1 *)
   | GoTo3 label -> 
     let goto_result = B("", (label3_to_arm  label)) in
