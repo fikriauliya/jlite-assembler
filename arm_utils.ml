@@ -37,6 +37,15 @@ let string_of_rallocs (rallocs: reg_allocations) (sep: string): string =
 
 
 
+let argmax f ls = match ls with
+  | h::t ->
+  	fold_left (
+  	  fun (arg,max) x -> let fx = f x in
+  	  	if fx > max then (x,fx) else (arg,max)
+  	) (h, f h) ls
+  | [] -> failwith "Cannot use argmax with an empty list!"
+
+
 (*
 (* Takes the first n element in a list and returns two list: those elements and the remaining ones *)
 let rec vertical_split n ls =
@@ -49,7 +58,7 @@ let rec vertical_split n ls =
 (* Only be turned on for debugging *)
 let println_debug line = begin
   (* printf "%s\n" line; *)
-  (* TODO: remove all the printl's cluttering the code *)
+  (* TODO: remove all the println's cluttering the code *)
 end
 
 let println line = begin
@@ -58,8 +67,6 @@ end
 
 
 (* Returns the relative position of a field in an object of a given type
-  TODO
-  TODO also take the class as an argument
 *)
 let get_field_offset (cname: cname3) (type_layouts: (cname3 * type_layout) list) (field_name: id3) =
   let nam,lay = List.find (fun (nam,_) -> nam = cname) type_layouts in

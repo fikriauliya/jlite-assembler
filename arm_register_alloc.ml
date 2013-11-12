@@ -148,10 +148,22 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
       let () = varn := Some var_id in
       regn, maybe_load regn var_id
     else (* we have to spill a register on the stack *)
-      let pick_spill_reg() = (* TODO use heuristic *)
+      (*let pick_spill_reg() = (* TODO use heuristic *)
         List.find (fun (regn,varn) -> not
           (* picks the first register that doesn't hold a var in no_spill_vars *)
           (List.exists (fun n -> match !varn with None -> false | Some v -> n = v) no_spill_vars)) rallocs in
+      *)
+      let pick_spill_reg() = 
+		    let (regn,varn), end_line = argmax (
+          fun (regn,varn) ->
+            if List.exists (fun n -> match !varn with None -> false | Some v -> n = v) no_spill_vars
+              then min_int
+              else match !varn with Some v -> (Hashtbl.find linfo.timelines v).end_line | None -> min_int
+        ) rallocs in
+        if end_line = min_int
+          then failwith "Unable to find a register to spill"
+          else regn, varn (*match !varn with Some v -> regn, v | None -> failwith "wut??"*)
+		  in
       let spilled_reg, spilled_var_ref = pick_spill_reg() in
       let spilled_var = match !spilled_var_ref with Some v -> v | _ -> failwith "unexpected quirk" in
       let store_instrs = store_variable stack_frame spilled_reg spilled_var in
@@ -163,7 +175,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   
   match get_var_register vid with
   | Some (reg, _) -> reg, []
-  | None -> (*let () = print_string (">>"^vid^"\n") in*) allocate_var vid
+  | None -> allocate_var vid
 
 
 (* 2 *)
@@ -171,9 +183,9 @@ let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3): (reg * (arm_instr list)) =
   match vidc3 with
   | Var3 vid -> ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt vid false
-  | IntLiteral3 i ->  "#" ^ (string_of_int i), [] (*TODO: replace this stub*)
-  | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), [] (*TODO: replace this stub*)
-  | StringLiteral3 s ->  "#" ^ s, [] (*TODO: replace this stub*)
+  | IntLiteral3 i ->  "#" ^ (string_of_int i), []
+  | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), []
+  | StringLiteral3 s ->  "#" ^ s, []
   | Null3 ->  "#0", []
     
 

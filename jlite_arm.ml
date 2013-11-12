@@ -391,9 +391,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
           | None ->
               load_variable stack_frame dst id3
         )
-        
-        (*TODO: support booleans?*)
-      | _ -> failwith ("PrintStmt3: currently only supports variables and string and int literals")
+      | _ -> failwith ("PrintStmt3: only supports variables and string or int literals")
       
       ) @ [BL("","printf(PLT)")] in
       let () = reset_mtd_reg rallocs in
@@ -460,7 +458,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
   let basic_blocks_map = derive_basic_blocks e_stmts in
-  (* TODO: enable this is flag is on: *)
+  (* TODO: enable this if flag is on: *)
   let optimized_blocks_map = if true then basic_blocks_map else eliminate_local_common_subexpression basic_blocks_map in
   let liveness_timeline = derive_liveness_timeline basic_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
   
