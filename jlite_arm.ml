@@ -493,13 +493,14 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
   let ir3_stmt_partial stmt =
     let new_linfo = get_next_line() in
+    let clean = clean_registers linfo rallocs in
     let coms = [
       EMPTY;
       COM("line "^(string_of_int linfo.current_line)^": " ^ (string_of_ir3_stmt stmt));
       COM("rallocs: " ^ (string_of_rallocs rallocs " "));
     ] in
     let ret = ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts sorted_all_stmts stmt in
-    coms @ ret
+    coms @ clean @ ret
   in
   
   let md_comments = gen_md_comments mthd stack_frame linfo in

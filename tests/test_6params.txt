@@ -5,11 +5,13 @@ class Main {
 		Compute help;
 		Bool b;
 		
+		println("Begining...");
+		
 		b = false;
 		b = ((!b) || false) && (b);
 		
 		if (help.add() == NULL) {
-			println("NULL return"); 
+			println("NULL return");
 		}
 		else {
 			println("Not NULL return"); 
