@@ -5,6 +5,8 @@ open Ir3_lifetimes
 open List
 
 
+let use_heuristic_for_spilling_registers = true
+
 
 let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
   try
@@ -148,13 +150,9 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
       let () = varn := Some var_id in
       regn, maybe_load regn var_id
     else (* we have to spill a register on the stack *)
-      (*let pick_spill_reg() = (* TODO use heuristic *)
-        List.find (fun (regn,varn) -> not
-          (* picks the first register that doesn't hold a var in no_spill_vars *)
-          (List.exists (fun n -> match !varn with None -> false | Some v -> n = v) no_spill_vars)) rallocs in
-      *)
-      let pick_spill_reg() = 
-		    let (regn,varn), end_line = argmax (
+      let pick_spill_reg() =
+      if use_heuristic_for_spilling_registers then
+        let (regn,varn), end_line = argmax (
           fun (regn,varn) ->
             if List.exists (fun n -> match !varn with None -> false | Some v -> n = v) no_spill_vars
               then min_int
@@ -163,6 +161,10 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
         if end_line = min_int
           then failwith "Unable to find a register to spill"
           else regn, varn (*match !varn with Some v -> regn, v | None -> failwith "wut??"*)
+      else
+        List.find (fun (regn,varn) -> not
+          (* picks the first register that doesn't hold a var in no_spill_vars *)
+          (List.exists (fun n -> match !varn with None -> false | Some v -> n = v) no_spill_vars)) rallocs
 		  in
       let spilled_reg, spilled_var_ref = pick_spill_reg() in
       let spilled_var = match !spilled_var_ref with Some v -> v | _ -> failwith "unexpected quirk" in
