@@ -253,7 +253,6 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
       | Idc3Expr (idc3_1) -> (get_uses_from_idc3 idc3_1)
       | MdCall3 (_, idc3s) -> (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
       | ObjectCreate3 _ -> []
-      | _ -> []
   in
   let i = ref (0) in
   List.map(fun x -> 
@@ -511,7 +510,7 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
       }
     ) param_vars;
 
-  let e = List.fold_left (fun prev curr ->
+  let _ = List.fold_left (fun prev curr ->
     let diff = Id3Set.diff curr.stmt_out_variables prev.stmt_out_variables in
 
     println_debug (string_of_enhanced_stmt curr);
@@ -1188,6 +1187,8 @@ let eliminate_local_common_subexpression (basic_blocks_map) = begin
       | (BoolLiteral3 v1, BoolLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
       | (StringLiteral3 v1, StringLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
       | (Var3 v1, Var3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (Null3, Null3) -> true
+      | _ -> false
   in
 
   (* Op -> idc3_1, idc3_2, var_name *)
