@@ -469,13 +469,26 @@ let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) (linfo: lines_in
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
-  let basic_blocks_map = derive_basic_blocks e_stmts in
+  let param_id3s = (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  let local_id3s = (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.localvars3) in
+  let e_stmts_and_declarations = 
+    [{
+      embedded_stmt= Label3 (-1);
+      defs= id3_set_of_list (param_id3s @ local_id3s);
+      uses= Id3Set.empty;
+      stmt_in_variables= Id3Set.empty;
+      stmt_out_variables= Id3Set.empty;
+      line_number = 0;
+    }]
+    @ e_stmts
+  in
+  let basic_blocks_map = derive_basic_blocks e_stmts_and_declarations in
   (* TODO: enable this is flag is on: *)
   let optimized_blocks_map = if true then basic_blocks_map else eliminate_local_common_subexpression basic_blocks_map in
-  let liveness_timeline = derive_liveness_timeline basic_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  let liveness_timeline = derive_liveness_timeline basic_blocks_map in
   
   let all_blocks = get_all_blocks optimized_blocks_map in
-  let all_stmts = get_all_stmts all_blocks in
+  let all_stmts = List.tl (get_all_stmts all_blocks) in
   let sorted_all_stmts = List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts) in
   
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)

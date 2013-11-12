@@ -199,7 +199,7 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   in
 
   println_debug "derive_basic_blocks";
-  split_into_blocks mthd_stmts [] 0 (-1) true false;
+  split_into_blocks mthd_stmts [] 0 (-2) true false;
   println_debug "fill_in_in_blocks";
   fill_in_in_blocks ();
   basic_blocks_map
@@ -214,7 +214,7 @@ let get_all_blocks basic_blocks_map =
 let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
   List.flatten (List.map (fun block -> block.stmts) blocks)
 
-let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : liveness_timeline_type = begin
+let derive_liveness_timeline (basic_blocks_map) : liveness_timeline_type = begin
   let liveness_timeline_map = Hashtbl.create 100 in
 
   let print_basic_blocks_map basic_blocks_map =
@@ -314,16 +314,6 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
   let all_stmts = get_all_stmts all_blocks in
   let sorted_all_stmts = List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts in
   
-  (* Add parameter variables into liveness *)
-  List.iter (fun param_var -> 
-      Hashtbl.add liveness_timeline_map param_var
-      {
-        variable_name = param_var;
-        start_line = 0;
-        end_line = 0;
-      }
-    ) param_vars;
-
   let _ = List.fold_left (fun prev curr ->
     let diff = Id3Set.diff curr.stmt_out_variables prev.stmt_out_variables in
 
@@ -368,13 +358,13 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
     curr
   ) 
     {
-      embedded_stmt= Label3 0; (* Dummy *)
-      stmt_out_variables= id3_set_of_list param_vars;
-      stmt_in_variables= Id3Set.empty;
-      defs= Id3Set.empty;
-      uses= Id3Set.empty;
-      line_number= 0;
-    } 
+     embedded_stmt= Label3 0; (* Dummy *)
+     stmt_out_variables= Id3Set.empty;
+     stmt_in_variables= Id3Set.empty;
+     defs= Id3Set.empty;
+     uses= Id3Set.empty;
+     line_number= -1;
+    }
     sorted_all_stmts in
 
   (* Check what variable exists in the END block *)
