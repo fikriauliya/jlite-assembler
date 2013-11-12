@@ -113,7 +113,7 @@ let clean_registers linfo rallocs =
       if not (is_alive v) then
         let () = println("line "^(string_of_int linfo.current_line)^": freed "^regn^" from "^v) in
         let () = varn := None in
-        if display_register_cleanings then [COM("freed "^regn)]*)
+        if display_register_cleanings then [COM("freed "^regn)]
         else []
       else []
     | None -> []
