@@ -441,6 +441,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
       id_instr @ exp_instr @ post_instr
     else
       let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
+      let _ = update_rallocs_var_at_reg rallocs (Some id) id_reg_dst in
       id_instr @ exp_instr @ [move_result] @ post_instr
   (* 2 *)
   | AssignFieldStmt3 (fla, exp) ->
