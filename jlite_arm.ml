@@ -138,22 +138,7 @@ let derive_precise_layout (clist: cdata3 list) ((cname,decls): cdata3)
 let derive_layout (clist: cdata3 list) ((cname,decls): cdata3): cname3 * type_layout =
   derive_precise_layout clist (cname,decls) 0 true
 
-(*
-(* Takes the first n element in a list and returns two list: those elements and the remaining ones *)
-let rec vertical_split n ls =
-  if n <= 0 then [], ls else match ls with
-    | h::rest -> let frst,scnd = take_first (n-1) in h::frst, scnd
-    | [] -> [], []
-*)
-
-(*let derive_stack_memory_map (params: (var_decl3 list)) (localvars: (var_decl3 list)) =
-  ([])*)
 let derive_stack_frame (clist: cdata3 list) (params: (var_decl3 list)) (localvars: (var_decl3 list)): type_layout =
-(*  let first_4_params, rest_params = vertical_split 4 params
-  let _, rest_params_layout = derive_layout clist ("", rest_params) 4 true in
-  (* The first 4 parameters are passed in register; in order to be able to spill them on the stack, we reserve some space for them *)
-  let _, vars_layout = derive_layout clist ("", first_4_params @ localvars) -28 false in
-  rest_params_layout @ vars_layout*)
   let _, params_layout = derive_precise_layout clist ("", params) 4 true in
   let _, vars_layout = derive_precise_layout clist ("", localvars) (-28) false in
   params_layout @ vars_layout
@@ -167,17 +152,9 @@ let reset_mtd_reg rallocs =
   ()
 
 
-
 let label3_to_arm lbl = "L" ^ (string_of_int lbl)
 
-(*
-let rec cdata3_from_id3 (localvars: var_decl3 list) (vid: id3) =
-  let t,_ = List.find (fun (_,id) -> id = vid) localvars
-  in match t with ObjectT cname -> | *)
 let cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
-  (*let () = println vid in*)
-  (*let _ = List.iter println  (List.map snd localvars) in*)
-  
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
 
@@ -191,26 +168,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
   | AssignDeclStmt3(_,id,_)
     -> ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id true
   | _ -> failwith "Tried to retrieve the assigned register from a non-assignment statement"
-  
-  (*
-  and ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
-      (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3) (must_be_register: bool)
-      : (string * (arm_instr list)) =
-    let (arm,instr), is_reg = match vidc3 with
-      | Var3 vid -> (ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt vid false), true
-      | IntLiteral3 i ->  ("#" ^ (string_of_int i), []), false (*TODO: replace this stub*)
-      | BoolLiteral3 b ->  ("#" ^ (if b = true then "1" else "0"), []), false (*TODO: replace this stub*)
-      | StringLiteral3 s ->  ("#" ^ s, []), false (*TODO: replace this stub*)
-    in
-    if must_be_register and not(is_reg) then
-      let (dstreg, dstinstr) = get_assigned_register currstmt in
-      (*let (reg, reginstr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt  in*)
-      in reg, dstinstr @ instr
-    else arm, instr
-  *)
-  
   in
-  
   
   match exp with
   | Idc3Expr (idc) ->
@@ -435,29 +393,6 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   (* 1 *)
   | PrintStmt3 idc3 ->
     begin
-      (* THIS IS NOT SAFE! one cannot simply load registers like that...
-      match idc3 with
-      | StringLiteral3 str ->
-        let label = Hashtbl.find string_table str in
-        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
-        let blinstr = BL("","printf(PLT)") in
-        [ldrinstr; blinstr]
-      | IntLiteral3 i ->
-        let label = Hashtbl.find string_table "%i" in
-        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
-        let movinstr = MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i))) in
-        let blinstr = BL("","printf(PLT)") in
-        [ldrinstr; movinstr; blinstr]
-      | Var3 id3 ->
-        let label = Hashtbl.find string_table "%i" in
-        let (var_reg, var_instr) = ir3_id3_to_arm linfo rallocs stack_frame stmts stmt id3 false in
-        let ldrinstr = LDR("","","a1",LabelAddr("=" ^ label)) in
-        let movinstr = MOV("",false,"a2",RegOp(var_reg)) in
-        let blinstr = BL("","printf(PLT)") in
-        [ldrinstr; movinstr; blinstr]
-      | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
-      *)
-      
       let request_reg r =
         match var_of_register rallocs r with
         | Some v -> (*let () = println(">>"^r^" "^v) in*)
@@ -488,38 +423,12 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
               load_variable stack_frame dst id3
         )
         
-      (*
-      let set_a1 value =
-        let dst = "a1" in
-        let ldr = LDR("","",dst,LabelAddr("=" ^ (Hashtbl.find string_table value)))
-        in (request_reg dst) @ [ldr]
-      in
-      let ret = (match idc3 with
-      | StringLiteral3 str ->
-        set_a1 str
-      | IntLiteral3 i ->
-        (set_a1 "%i") @ (request_reg "a2") @ [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i)))]
-      | Var3 id3 ->
-        let dst = "a2" in
-        (set_a1 "%i") @ (request_reg dst) @
-        (
-          match register_of_var rallocs id3 with
-          | Some r ->
-            [make_move("", false, dst, RegOp(r))]
-          | None ->
-            load_variable stack_frame dst id3
-        )
-        *)
-        
         (*TODO: support booleans?*)
       | _ -> failwith ("PrintStmt3: currently only supports variables and string and int literals")
       
       ) @ [BL("","printf(PLT)")] in
       let () = reset_mtd_reg rallocs in
       ret
-      
-      (*spill_variable  
-      [ldrinstr; movinstr; BL("","printf(PLT)")]*)
       
     end
   (* 1 *)
@@ -544,12 +453,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
     let var_reg, var_instr = ir3_id3_partial stmt obj_var false in
     let exp_reg, exp_instr, post_instr = ir3_exp_partial stmt exp in
     
-    (*let typ, _ = List.find (fun (_,vname) -> vname = obj_var) localvars in
-    let clasname = (match typ with ObjectT n -> n | _ -> failwith "accessing field of a non-object variable") in*)
     let cname = cname_from_id3 localvars obj_var in
-    
-    (*let _, lay = List.find (fun (clas,lay) -> clas = cname) type_layouts in
-    let offset = get_variable_offset lay field_name in*)
     
     let str = STR("", "", exp_reg,
       RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name, false)) in
@@ -570,12 +474,16 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
-let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
+let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) (linfo: lines_info) =
   [
     COM ("Function " ^ mthd.id3);
-    COM "Local variable offsets:";
+    COM "Local variable offsets and life intervals:";
   ]
-  @ List.map (fun (id,off) -> COM ("  " ^ id ^ " : " ^ (string_of_int off))) stack_frame
+  @ List.map (fun (id,off) -> COM (
+      "  " ^ id ^
+      " : " ^ (string_of_int off) ^
+      "   \t" ^ (string_of_timeline (Hashtbl.find linfo.timelines id))
+    )) stack_frame
   @ [EMPTY]
 
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
@@ -589,11 +497,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let all_blocks = get_all_blocks optimized_blocks_map in
   let all_stmts = get_all_stmts all_blocks in
   let sorted_all_stmts = List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts) in
-
-  (*
-    let () = print_string (string_of_int (List.length liveness_timeline)) in
-    let () = List.iter (fun (id,_) -> print_string ("'"^id^"'")) liveness_timeline in
-  *)
+  
   (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
   let rallocs = [
     "a1", ref None;
@@ -626,13 +530,10 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (* Callee stack & register management END *)
   let stack_frame = derive_stack_frame clist mthd.params3 localvars in
   let type_layouts = List.map (derive_layout clist) clist in
-  (*
-  let current_line = ref 0 in
-  let get_next_line() = let () = current_line := !current_line + 1 in !current_line in
-  *)
+  
   let linfo = { current_line = 0; timelines = liveness_timeline } in
   let get_next_line() = let () = linfo.current_line <- linfo.current_line + 1
-  (*; print_string (string_of_int linfo.current_line)*) in linfo in
+  in linfo in
     
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
   let ir3_stmt_partial stmt =
@@ -646,7 +547,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     coms @ ret
   in
   
-  let md_comments = gen_md_comments mthd stack_frame in
+  let md_comments = gen_md_comments mthd stack_frame linfo in
   begin
     (* Telling this function that some arguments are on registers *)
     (* Assuming 1st variable on a1, 2nd on a2 ..., 4th on a4 *)

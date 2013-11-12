@@ -8,11 +8,6 @@ type reg_allocation = reg * id3 option ref
 type reg_allocations = (reg_allocation) list
 
 let string_of_ralloc ((reg, var): reg_allocation): string option =
-  (*
-  let idstr = match !var with
-    | Some v -> v
-    | None -> "None"
-  in reg ^ " " ^ idstr*)
   match !var with
     | Some v -> Some (reg ^ "=" ^ v)
     | None -> None
@@ -22,11 +17,6 @@ let string_of_rallocs (rallocs: reg_allocations) (sep: string): string =
   String.concat sep (List.flatten
     (List.map (fun s -> match string_of_ralloc s with Some s -> [s] | _ -> []) rallocs)
   )
-
-(* variable name -> reserved memory address in stack
-type stack_memory_map_type =
-  ((id3 * memory_address_type) list)
-*)
 
 (* Update content of r to be new_var *)
 let update_rallocs_var_at_reg (rallocs: reg_allocations) (new_var: id3 option) (r: reg) =
@@ -74,22 +64,14 @@ let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (
   | None ->
     load_variable stack_frame dst_reg var_name
   in let _ = update_rallocs_var_at_reg rallocs (Some var_name) dst_reg
-  in ret (*@ [COM "LOL!!!"]*)
-
-
-(* 5 
-let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
-  ("v1", [])
-*)
-
+  in ret
 
 
 (* 4 *)
 let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
-  (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3) (*(no_spill_vars: id3 list)*)
+  (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vid: id3)
   (write_only: bool)
   : reg * arm_instr list =
-(*  ("v1", [])*)
   
   let idc3_to_id3_list idc = match idc with Var3 id -> [id] | _ -> [] in
   let no_spill_vars exp = match exp with
@@ -117,23 +99,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   in
   
   let is_alive vid =
-    (*
-    let () = print_string ("OK " ^ vid ^ "  ") in
-    let () = Hashtbl.iter (fun n ln -> print_string ln.variable_name) linfo.timelines in
-    *)
-    (*
-    let _, (_, death_line) = List.find (fun (id,_) -> id = vid) linfo.timelines in
-    linfo.current_line <= death_line
-    *)
-
-  (* TODONE fixme: use a lifetime for "this" *)
-    (*if vid = "this" then true else*)
-
-    let lness = Hashtbl.find linfo.timelines vid in (*(fun lness -> lness.variable_name = vid) in*)
-    (*
-    let () = print_string (vid^" alive? "); if linfo.current_line <= lness.end_line
-      then print_string ((string_of_int linfo.current_line) ^"\t"^ vid ^ " is dead!\n") else () in
-    *)
+    let lness = Hashtbl.find linfo.timelines vid in
     linfo.current_line <= lness.end_line
   in
   
@@ -155,7 +121,6 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     if List.exists free rallocs then
       let (regn,varn) = List.find free (List.rev rallocs) in
       let () = varn := Some var_id in
-(*      regn, load_variable stack_frame regn var_id *)
       regn, maybe_load regn var_id
     else (* we have to spill a register on the stack *)
       let pick_spill_reg() = (* TODO use heuristic *)
@@ -168,11 +133,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
       let () = spilled_var_ref := Some var_id in
       
       spilled_reg,
-      (*
-      COM("LOL") ::
-      *)
       free_com_instrs @ store_instrs @ maybe_load spilled_reg var_id
-(*      @ (load_variable stack_frame spilled_reg var_id) *)
   in
   
   match get_var_register vid with
