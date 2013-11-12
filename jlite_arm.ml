@@ -455,8 +455,8 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let liveness_timeline = derive_liveness_timeline basic_blocks_map in
   
   let all_blocks = get_all_blocks optimized_blocks_map in
-  let all_stmts = List.tl (get_all_stmts all_blocks) in
-  let sorted_all_stmts = List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts) in
+  let all_stmts = get_all_stmts all_blocks in
+  let sorted_all_stmts = List.tl (List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts)) in
   
   let rallocs = if debug_restrict_registers then [
     "a1", ref None;
