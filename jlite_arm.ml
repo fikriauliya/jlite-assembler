@@ -515,7 +515,8 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   
   let linfo = { current_line = 0; timelines = liveness_timeline } in
   let get_next_line() = let () = linfo.current_line <- linfo.current_line + 1
-   
+  in linfo in
+    
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
   let ir3_stmt_partial stmt =
     let new_linfo = get_next_line() in
