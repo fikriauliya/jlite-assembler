@@ -25,11 +25,11 @@ let add_idc3_to_string_table idc3 isPrintStmt =
   begin
     match idc3 with
     | StringLiteral3 str ->
-      if Hashtbl.mem string_table str then () else
-        Hashtbl.add string_table str (fresh_string_label())
+      if Hashtbl.mem string_table (str ^ "\\n") then () else
+        Hashtbl.add string_table (str ^ "\\n") (fresh_string_label())
     | Var3 _ | IntLiteral3 _ ->
-      if isPrintStmt && not (Hashtbl.mem string_table "%i") then
-        Hashtbl.add string_table "%i" (fresh_string_label())
+      if isPrintStmt && not (Hashtbl.mem string_table "%i\\n") then
+        Hashtbl.add string_table "%i\\n" (fresh_string_label())
       else ()
     | _ -> ()
   end
@@ -393,12 +393,12 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
       let saves = flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs) in
       let ret = saves @ (match idc3 with
       | StringLiteral3 str ->
-        [set_a1 str]
+        [set_a1 (str ^ "\\n")]
       | IntLiteral3 i ->
-        (set_a1 "%i") :: [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i)))]
+        (set_a1 "%i\\n") :: [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i)))]
       | Var3 id3 ->
         let dst = "a2" in
-        (set_a1 "%i") ::
+        (set_a1 "%i\\n") ::
         (
           match register_of_var rallocs id3 with
           | Some r ->
