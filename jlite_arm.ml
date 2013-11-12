@@ -313,13 +313,13 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
               unspill_variable stack_frame dst id3 rallocs
         end
     in
-    let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
+    let mdargs_to_stack (idc: idc3) (arg_index: int) (args: idc3 list): (arm_instr list) =
       begin
         match idc with
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ | Null3 -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id3 false in
-          var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
+          var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", ((List.length args) - arg_index)*(-4), false))]
       end
     in
     let rec prepare_reg_args arg_index args =
@@ -330,7 +330,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       if (List.length args) <= arg_index then []
       (* Push arguments with reverse order.
        * Change if stack frame layout for parameter is changed. *)
-      else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index)
+      else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index args)
     in
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
