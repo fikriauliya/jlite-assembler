@@ -92,7 +92,11 @@ let rec jliteexpr_to_IR3Expr
           (iR3Expr_to_id3 newExpr t vars stmts toidc3)
         | BinaryExp (op,arg1,arg2) -> 
           let (arg1IR3,vars1,stmts1) = (helper arg1 true true) in
-          let (arg2IR3,vars2,stmts2) = (helper arg2 true false) in
+          let (arg2IR3,vars2,stmts2) =
+            if (match op with AritmeticOp s -> s | _ -> "") = "*"
+              then (helper arg2 true true)
+              else (helper arg2 true false)
+          in
           let arg1Idc3 = (iR3Expr_get_idc3 arg1IR3) in 
           let arg2Idc3 = (iR3Expr_get_idc3 arg2IR3) in 
           let newExpr = BinaryExp3 (op, arg1Idc3, arg2Idc3) in 
