@@ -1,3 +1,4 @@
+@echo off
 rm main.cmo 2> null
 rm rez.exe 2> null
 goto SIMPLIFIED

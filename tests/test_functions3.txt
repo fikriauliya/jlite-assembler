@@ -1,0 +1,46 @@
+class Main {
+    void main(){
+        Int a;
+        Compute help;
+
+        help = new Compute();
+        a = help.add(1, 2);
+        println(a); // Should output 24
+        println("\n");
+    }
+}
+
+class Compute {
+    Int add(Int a, Int b){
+        return a+b;
+    }
+
+    Int doSomething() {
+        Int a;
+        Int b;
+        Int c;
+        Int d;
+        Int e;
+        Int f;
+        Compute1 z;
+        Compute1 zz;
+
+        z = new Compute1();
+        zz = new Compute1();
+        a = 1;
+        b = 2;
+        c = a + b;
+        e = c + c;
+        z.doNothing();
+        f = e;
+        zz.doNothing();
+        z.doNothing();
+        return f;
+    }
+}
+
+class Compute1 {
+    void doNothing() {
+        println("yeehaw");
+    }
+}

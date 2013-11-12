@@ -37,7 +37,24 @@ type active_spill_variables_type =
   ((id3 list) * (id3 list))
 *)
 
-type reg_allocations = (reg * id3 option ref) list
+type reg_allocation = reg * id3 option ref
+type reg_allocations = (reg_allocation) list
+
+let string_of_ralloc ((reg, var): reg_allocation): string option =
+  (*
+  let idstr = match !var with
+    | Some v -> v
+    | None -> "None"
+  in reg ^ " " ^ idstr*)
+  match !var with
+    | Some v -> Some (reg ^ "=" ^ v)
+    | None -> None
+
+let string_of_rallocs (rallocs: reg_allocations) (sep: string): string =
+  (*string_of_list rallocs string_of_ralloc sep*)
+  String.concat sep (List.flatten
+    (List.map (fun s -> match string_of_ralloc s with Some s -> [s] | _ -> []) rallocs)
+  )
 
 (* variable name -> reserved memory address in stack
 type stack_memory_map_type =
@@ -48,7 +65,7 @@ type type_layout =
 (id3 * memory_address_offset) list
 
 type enhanced_stmt = {
-  embedded_stmt: ir3_stmt;
+  mutable embedded_stmt: ir3_stmt;
   defs: Id3Set.t;
   uses: Id3Set.t;
   mutable stmt_in_variables: Id3Set.t;
@@ -154,6 +171,14 @@ let add_ir3_stmt_to_string_table stmt3 =
       ()
   end
 
+(* Update content of r to be new_var *)
+let update_rallocs_var_at_reg (rallocs: reg_allocations) (new_var: id3 option) (r: reg) =
+  try
+    let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in
+    let _ = (var_option := new_var) in ()
+  with
+  | Not_found -> failwith ("update_rallocs_var_at_reg: Invalid register name: " ^ r)
+
 (* Adds string literals and/or integer format specifier to the string table *)
 let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
   let rec helper stmts =
@@ -167,8 +192,21 @@ let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_progra
     end      
   in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
 
-let var_in_register (rallocs: reg_allocations) (r: reg): (id3 option) =
-  let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
+let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
+  try
+    let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
+  with
+  | Not_found -> failwith ("var_of_register: Invalid register name: " ^ r)
+
+let register_of_var (rallocs: reg_allocations) (v: id3): (reg option) =
+  try
+    let (reg, _) = List.find (fun (_, var) -> match !var with
+    | Some var_name -> var_name = v
+    | None -> false
+    ) rallocs in
+    (Some reg)
+  with
+  | Not_found -> None
 
 (*
  * Calculate the size of a variable. In fact, every variable has size 4 :)
@@ -211,13 +249,14 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
     match e with
       | BinaryExp3 (_, idc3_1, idc3_2) -> (get_uses_from_idc3 idc3_1) @ (get_uses_from_idc3 idc3_2)
       | UnaryExp3 (_, idc3_1) -> (get_uses_from_idc3 idc3_1)
-      | FieldAccess3 (id3_1, id3_2) -> [id3_1]
+      | FieldAccess3 (id3_1, _) -> [id3_1]
       | Idc3Expr (idc3_1) -> (get_uses_from_idc3 idc3_1)
-      | MdCall3 (id3_1, idc3s) -> [id3_1] @ (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
+      | MdCall3 (_, idc3s) -> (List.fold_left (fun accum x -> accum @ (get_uses_from_idc3 x)) [] idc3s)
       | ObjectCreate3 _ -> []
       | _ -> []
   in
-  List.mapi (fun i x -> 
+  let i = ref (0) in
+  List.map(fun x -> 
     let (calc_defs, calc_uses) = match x with
       | IfStmt3 (e, _)  -> ([], (get_uses_from_ir3exp e))
       | PrintStmt3 (Var3 res) -> ([], [res])
@@ -233,14 +272,15 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
       (* | ReturnVoidStmt3 ->  *)
       | _ -> ([], [])
     in
+    i:=!i+1;
     {
       embedded_stmt = x;
       defs = id3_set_of_list calc_defs;
       uses = id3_set_of_list calc_uses;
       stmt_in_variables = Id3Set.empty;
       stmt_out_variables = Id3Set.empty;
-      line_number = i;
-    }
+      line_number = !i;
+    };
   ) stmts
 end
 
@@ -279,14 +319,14 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
           else 
             Hashtbl.add basic_blocks_map cur_block_id 
             {
-              stmts = stmts_accum @ [stmt];
+              stmts = stmts_accum;
               in_blocks = [];
               out_blocks = [(label :>int)];
               in_variables = Id3Set.empty;
               out_variables = Id3Set.empty;
               block_id = cur_block_id;
             };
-          split_into_blocks rests [] (label:>int) non_labeled_block_id false false
+          split_into_blocks rests [stmt] (label:>int) non_labeled_block_id false false
         end
         | GoTo3 label -> begin
           if (skip) then ()
@@ -318,9 +358,19 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
             };
           split_into_blocks rests [] labeled_block_id next_block_id true skip
         end
-        (* TODO: handle:
-        | ReturnStmt3 of id3
-        | ReturnVoidStmt3 *)
+        | ReturnStmt3 _ | ReturnVoidStmt3 ->
+          if (skip) then ()
+          else 
+            Hashtbl.add basic_blocks_map cur_block_id 
+            {
+              stmts = stmts_accum @ [stmt];
+              in_blocks = [];
+              out_blocks = [0];
+              in_variables = Id3Set.empty;
+              out_variables = Id3Set.empty;
+              block_id = cur_block_id;
+            };
+          split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
         | _ -> begin
           split_into_blocks rests (stmts_accum @ [stmt]) labeled_block_id non_labeled_block_id appending_mode skip
         end
@@ -344,17 +394,16 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   (* [] *)
 end
 
+let get_all_blocks basic_blocks_map =
+  Hashtbl.fold (fun k v ret -> 
+    ret @ [v]
+  ) basic_blocks_map []
+
+let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
+  List.flatten (List.map (fun block -> block.stmts) blocks)
+
 let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : liveness_timeline_type = begin
   let liveness_timeline_map = Hashtbl.create 100 in
-
-  let get_all_blocks basic_blocks_map =
-    Hashtbl.fold (fun k v ret -> 
-      ret @ [v]
-    ) basic_blocks_map [] in
-
-  let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
-    List.flatten (List.map (fun block -> block.stmts) blocks)
-  in
 
   let print_basic_blocks_map basic_blocks_map =
     Hashtbl.iter (fun k (v:basic_block_type) ->
@@ -460,8 +509,8 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
       Hashtbl.add liveness_timeline_map param_var
       {
         variable_name = param_var;
-        start_line = -1;
-        end_line = -1;
+        start_line = 0;
+        end_line = 0;
       }
     ) param_vars;
 
@@ -509,12 +558,12 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
     curr
   ) 
     {
-      embedded_stmt= Label3 0;
-      stmt_out_variables= Id3Set.empty;
+      embedded_stmt= Label3 0; (* Dummy *)
+      stmt_out_variables= id3_set_of_list param_vars;
       stmt_in_variables= Id3Set.empty;
       defs= Id3Set.empty;
       uses= Id3Set.empty;
-      line_number= -1;
+      line_number= 0;
     } 
     sorted_all_stmts in
 
@@ -591,6 +640,20 @@ let get_variable_offset (stack_frame: type_layout) (var_name: id3) =
   let _, offset = List.find (fun (id,_) -> id = var_name) stack_frame
   in offset
 
+
+let make_move ((cnd,s,rd,op2): mov_instr_type) =
+  match op2 with RegOp r | ImmedOp r ->
+    let mov = MOV(cnd,s,rd,op2) in (*let () = println ("-->"^rd^" "^r) in*)
+    if r = rd then COM ((*"[useless] " ^*) (string_of_arm_instr mov))
+    else mov
+
+let reset_mtd_reg rallocs =
+  let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
+  ()
+
 let load_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3): arm_instr list =
   let offset = get_variable_offset stack_frame var_name in
   let ldr = LDR("", "", dst_reg, RegPreIndexed("fp", offset, false)) in
@@ -601,20 +664,36 @@ let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): ar
   let str = STR("", "", src_reg, RegPreIndexed("fp", offset, false)) in
   [str]
 
-let spill_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
-  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = src_reg) rallocs in
-  let _ = (var_option := None) in
+(* Unassign var_name from src_reg and generate the arm instruction for that as well. *)
+let spill_variable (stack_frame: type_layout) (src_reg: reg) (*(var_name: id3)*) (rallocs: reg_allocations): arm_instr list =
+  let var_name =
+    match var_of_register rallocs src_reg with
+    | Some id3 -> id3
+    | None -> failwith "trying to spill an unassigned register!" in
+  let _ = update_rallocs_var_at_reg rallocs None src_reg in
   store_variable stack_frame src_reg var_name
 
+(* Assign var_name to dst_reg and generate the arm instruction for that as well. *)
+(* Added behavior: if the variable is already in a register, it moves it to the dst register and updates rallocs *)
 let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (rallocs: reg_allocations): arm_instr list =
-  let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = dst_reg) rallocs in
-  let _ = (var_option := Some var_name) in
-  load_variable stack_frame dst_reg var_name
+  let ret = match register_of_var rallocs var_name with
+  | Some reg ->
+    let (_, id3_ref) = List.find (fun (reg_name, _) -> reg_name = reg) rallocs in
+    let () = id3_ref := None in
+    [make_move("", false, dst_reg, RegOp(reg))]
+  | None ->
+    load_variable stack_frame dst_reg var_name
+  in let _ = update_rallocs_var_at_reg rallocs (Some var_name) dst_reg
+  in ret (*@ [COM "LOL!!!"]*)
+
+
 
 (* 5 
 let get_register (asvs: active_spill_variables_type) (stack_frame: type_layout) (stmts: ir3_stmt list) (currstmt: ir3_stmt): (reg * (arm_instr list)) =
   ("v1", [])
 *)
+
+let label3_to_arm lbl = "L" ^ (string_of_int lbl)
 
 (* 4 *)
 let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
@@ -658,26 +737,31 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     linfo.current_line <= death_line
     *)
 
-  (* TODO fixme: use a lifetime for "this" *)
-    if vid = "this" then true else
+  (* TODONE fixme: use a lifetime for "this" *)
+    (*if vid = "this" then true else*)
 
     let lness = Hashtbl.find linfo.timelines vid in (*(fun lness -> lness.variable_name = vid) in*)
-    
-    let () = if linfo.current_line <= lness.end_line
-      then print_string ((string_of_int linfo.current_line) ^"\t"^ vid ^ " died!!\n") else () in
-    
+    (*
+    let () = print_string (vid^" alive? "); if linfo.current_line <= lness.end_line
+      then print_string ((string_of_int linfo.current_line) ^"\t"^ vid ^ " is dead!\n") else () in
+    *)
     linfo.current_line <= lness.end_line
   in
   
   let clean_registers() =
-    let _ = List.map (fun (regn,varn) -> match !varn with
-      | Some v -> if not (is_alive v) then varn := None else ()
-      | None -> ()
-    ) rallocs in ()
+    List.flatten (List.map (fun (regn,varn) -> match !varn with
+      | Some v ->
+        if not (is_alive v) then
+          let () = println("line "^(string_of_int linfo.current_line)^": freed "^regn^" from "^v) in
+          let () = varn := None in
+          [COM("freed "^regn^" from "^v)]
+        else []
+      | None -> []
+    ) rallocs)
   in
   
   let allocate_var var_id: (reg * (arm_instr list)) =
-    let () = clean_registers() in
+    let free_com_instrs = clean_registers() in
     let free (regn,varn) = match !varn with None -> true | Some _ -> false in
     if List.exists free rallocs then
       let (regn,varn) = List.find free (List.rev rallocs) in
@@ -695,14 +779,17 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
       let () = spilled_var_ref := Some var_id in
       
       spilled_reg,
-        store_instrs
+      (*
+      COM("LOL") ::
+      *)
+      free_com_instrs @ store_instrs @ maybe_load spilled_reg var_id
 (*      @ (load_variable stack_frame spilled_reg var_id) *)
-      @ maybe_load spilled_reg var_id
   in
   
   match get_var_register vid with
   | Some (reg, _) -> reg, []
-  | None -> allocate_var vid
+  | None -> (*let () = print_string (">>"^vid^"\n") in*) allocate_var vid
+
 
 (* 2 *)
 let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
@@ -712,12 +799,15 @@ let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   | IntLiteral3 i ->  "#" ^ (string_of_int i), [] (*TODO: replace this stub*)
   | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), [] (*TODO: replace this stub*)
   | StringLiteral3 s ->  "#" ^ s, [] (*TODO: replace this stub*)
-
+    
 (*
 let rec cdata3_from_id3 (localvars: var_decl3 list) (vid: id3) =
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> | *)
 let cname_from_id3 (localvars: var_decl3 list) (vid: id3) =
+  (*let () = println vid in*)
+  (*let _ = List.iter println  (List.map snd localvars) in*)
+  
   let t,_ = List.find (fun (_,id) -> id = vid) localvars
   in match t with ObjectT cname -> cname | _ -> failwith "This type is not a class"
 
@@ -732,7 +822,27 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     -> ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id true
   | _ -> failwith "Tried to retrieve the assigned register from a non-assignment statement"
   
-  in match exp with
+  (*
+  and ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
+      (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3) (must_be_register: bool)
+      : (string * (arm_instr list)) =
+    let (arm,instr), is_reg = match vidc3 with
+      | Var3 vid -> (ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt vid false), true
+      | IntLiteral3 i ->  ("#" ^ (string_of_int i), []), false (*TODO: replace this stub*)
+      | BoolLiteral3 b ->  ("#" ^ (if b = true then "1" else "0"), []), false (*TODO: replace this stub*)
+      | StringLiteral3 s ->  ("#" ^ s, []), false (*TODO: replace this stub*)
+    in
+    if must_be_register and not(is_reg) then
+      let (dstreg, dstinstr) = get_assigned_register currstmt in
+      (*let (reg, reginstr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt  in*)
+      in reg, dstinstr @ instr
+    else arm, instr
+  *)
+  
+  in
+  
+  
+  match exp with
   | Idc3Expr (idc) ->
     let (reg, instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt idc in
     (reg, instr, [])
@@ -761,8 +871,8 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
             let (op2reg, op2instr) = ir3_idc3_to_arm linfo rallocs stack_frame stmts currstmt idc2 in
             let (dstreg, dstinstr) = get_assigned_register currstmt in
             let eqinstr = CMP("", op1reg, RegOp(op2reg)) in
-            let mveqinstr = MOV(movcond1, false, op1reg, ImmedOp("#1")) in
-            let mvneinstr = MOV(movcond2, false, op1reg, ImmedOp("#0")) in
+            let mveqinstr = MOV(movcond1, false, dstreg, ImmedOp("#1")) in
+            let mvneinstr = MOV(movcond2, false, dstreg, ImmedOp("#0")) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [eqinstr; mveqinstr; mvneinstr], []) in
           match rop with
           | "==" ->
@@ -801,7 +911,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
             let instr = MUL("", false, dstreg, op1reg, op2reg) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | "-" ->
-            let instr = SUB("", false, op1reg, op1reg, RegOp(op2reg)) in
+            let instr = SUB("", false, dstreg, op1reg, RegOp(op2reg)) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
           | _ -> failwith ("Arithmetic operand not supported")
         end
@@ -818,8 +928,8 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
           match op with
           | "!" ->
             let cmpfalseinstr = CMP("", op1reg, ImmedOp("#0")) in
-            let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#0")) in
-            let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#1")) in
+            let mveqinstr = MOV("eq", false, dstreg, ImmedOp("#1")) in
+            let mvneinstr = MOV("ne", false, dstreg, ImmedOp("#0")) in
             (dstreg, op1instr @ dstinstr @ [cmpfalseinstr; mveqinstr; mvneinstr], [])
           | "-" ->
             let revsubinstr = RSB("", false, dstreg, op1reg, ImmedOp("#0")) in
@@ -841,36 +951,51 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
   | MdCall3 (m_id, args) ->
     let mdargs_to_reg (idc: idc3) (dst: reg): (arm_instr list) = 
       match idc with
-      | IntLiteral3 i -> [MOV("", false, dst, ImmedOp("#" ^ string_of_int i))]
-      (* TODO: Replace with whatever way we represent boolean *)
-      | BoolLiteral3 b -> [MOV("", false, dst, ImmedOp("#" ^ string_of_bool b))]
-      (* TODO: Replace with the address of string later *)
-      | StringLiteral3 s -> [MOV("", false, dst, ImmedOp("#" ^ s))]
-      (* TODO: Spill and allocate to register *)
+      | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
       | Var3 id3 ->
         begin
-          let mov_arg_to_reg = unspill_variable stack_frame dst id3 rallocs in
-          let curr_reg_var = var_in_register rallocs dst in
-          match curr_reg_var with
-          | Some v ->
-            if v <> id3 then (spill_variable stack_frame dst v rallocs) @ mov_arg_to_reg
-            else []
-          | None -> mov_arg_to_reg
+          match register_of_var rallocs id3 with
+          (* Argument already in register, just move *)
+          | Some r -> if r = dst then (* [] *) [make_move("", false, dst, RegOp(r))]
+            else
+              begin
+(*                let mov_arg_to_reg = [MOV("", false, dst, RegOp(r))] in*)
+                let mov_arg_to_reg = [make_move("", false, dst, RegOp(r))] in
+                match var_of_register rallocs dst with
+                | Some v ->
+                  (* Some other variable exists in a_x register, spill and move *)
+                  if v <> id3 then
+                    let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
+                    (spill_variable stack_frame dst rallocs) @ mov_arg_to_reg
+                  else (* [] *) [make_move("", false, v, RegOp(id3))]
+                | None ->
+                  (* No other variable exists in a_x register, just move *)
+                  let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
+                  mov_arg_to_reg
+              end
+          (* Argument not in register yet, load *)
+          | None ->
+            match var_of_register rallocs dst with
+            | Some v ->
+              (* Some other variable exists in a_x register, spill and load *)
+              if v <> id3 then (spill_variable stack_frame dst rallocs) @ (unspill_variable stack_frame dst id3 rallocs)
+              else []
+            | None ->
+              (* No other variable exists in a_x register, just load *)
+              unspill_variable stack_frame dst id3 rallocs
         end
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
       begin
         match idc with
         | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
-        (* TODO: Spill and allocate to register *)
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id3 false in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
-          (* TODO: Add information about arguments to table here if needed *)
       end
     in
     let rec prepare_reg_args arg_index args =
-      if (List.length args) <= arg_index then []
+      if (List.length args) <= arg_index || arg_index >= 4 then []
       else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int (arg_index+1)) @ (prepare_reg_args (arg_index + 1) args)
     in
     let rec prepare_stack_args arg_index args =
@@ -879,19 +1004,20 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
        * Change if stack frame layout for parameter is changed. *)
       else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index)
     in
-    let caller_save = STMFD (["a1"; "a2"; "a3"; "a4"]) in
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
       begin
-        let first_four_args = prepare_reg_args 0 args in
         let rest_args = prepare_stack_args 4 args in
-        first_four_args @ rest_args
+        let first_four_args = prepare_reg_args 0 args in
+        rest_args @ first_four_args
       end
     in
     let actual_call = BL("", m_id) in
-    let caller_load = LDMFD (["a1"; "a2"; "a3"; "a4"]) in
-    ("a1", caller_save :: [allocate_args_stack] @ (prepare_args args) @ [actual_call] @ [deallocate_args_stack], [caller_load])
+    let result = ("a1", (prepare_args args) @ [allocate_args_stack] @ [actual_call] @ [deallocate_args_stack], []) in
+    (* Set a1,a2,a3,a4 to free after function calls *)
+    let () = reset_mtd_reg rallocs in
+    result
   (* 4 *)
   | ObjectCreate3 class_name ->
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
@@ -908,23 +1034,24 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   match stmt with
   (* 1 *)
   | Label3 label ->
-    let label_result = Label(string_of_int label) in
+    let label_result = Label(label3_to_arm label) in
     [label_result]
   (* 3 *)
   | IfStmt3 (exp, label) ->
     (* TODO: complete the implementation *)
     let (exp_reg, exp_instr, post_instr) = ir3_exp_partial stmt exp in
-    let if_result = B("eq", string_of_int(label)) in
+    let if_result = B("eq", label3_to_arm label) in
     exp_instr @ [if_result] @ post_instr
   (* 1 *)
   | GoTo3 label -> 
-    let goto_result = B("", (string_of_int label)) in
+    let goto_result = B("", (label3_to_arm  label)) in
     [goto_result]
   (* 1 *)
   | ReadStmt3 _ -> failwith ("ReadStmt3: STATEMENT NOT IMPLEMENTED")
   (* 1 *)
   | PrintStmt3 idc3 ->
     begin
+      (* THIS IS NOT SAFE! one cannot simply load registers like that...
       match idc3 with
       | StringLiteral3 str ->
         let label = Hashtbl.find string_table str in
@@ -945,6 +1072,62 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
         let blinstr = BL("","printf(PLT)") in
         [ldrinstr; movinstr; blinstr]
       | _ -> failwith ("PrintStmt3: currently only supports string and int literals")
+      *)
+      
+      let request_reg r =
+        match var_of_register rallocs r with
+        | Some v ->
+          (* Some other variable exists in a_x register, spill and load *)
+          spill_variable stack_frame r rallocs
+        | None ->
+          (* No other variable exists in a_x register, just load *)
+          []
+      in
+      let set_a1 value =
+        let dst = "a1" in
+        let ldr = LDR("","",dst,LabelAddr("=" ^ (Hashtbl.find string_table value)))
+        in (request_reg dst) @ [ldr]
+      in
+      let ret = (match idc3 with
+      | StringLiteral3 str ->
+        set_a1 str
+      | IntLiteral3 i ->
+        (set_a1 "%i") @ (request_reg "a2") @ [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int i)))]
+      | Var3 id3 ->
+        let dst = "a2" in
+        (set_a1 "%i") @ (request_reg dst) @
+        (
+          match register_of_var rallocs id3 with
+          | Some r ->
+            [make_move("", false, dst, RegOp(r))]
+          | None ->
+            load_variable stack_frame dst id3
+        )
+        (*
+        (
+          match var_of_register rallocs dst with
+          | Some v ->
+            (* Some other variable exists in a_x register, spill and load *)
+            if v <> id3 then
+              let spill = (spill_variable stack_frame dst rallocs) in
+              spill @ (unspill_variable stack_frame dst id3 rallocs)
+            else [make_move("", false, dst, RegOp(dst))]
+          | None ->
+            (* No other variable exists in a_x register, just load *)
+            unspill_variable stack_frame dst id3 rallocs
+        )
+        *)
+        
+        (*TODO: support booleans?*)
+      | _ -> failwith ("PrintStmt3: currently only supports variables and string and int literals")
+      
+      ) @ [BL("","printf(PLT)")] in
+      let () = reset_mtd_reg rallocs in
+      ret
+      
+      (*spill_variable  
+      [ldrinstr; movinstr; BL("","printf(PLT)")]*)
+      
     end
   (* 1 *)
   | AssignDeclStmt3 (_, id, exp)
@@ -996,29 +1179,87 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
 
 let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
   [
-    COM ("Funcion " ^ mthd.id3);
+    COM ("Function " ^ mthd.id3);
     COM "Local variable offsets:";
   ]
   @ List.map (fun (id,off) -> COM ("  " ^ id ^ " : " ^ (string_of_int off))) stack_frame
   @ [EMPTY]
 
 let eliminate_local_common_subexpression (basic_blocks_map) = begin
-  (* Hashtbl.iter (fun k v -> 
-    List.map 
-      (fun stmt -> match stmt with
-        AssignStmt3 id3_res, e -> 
-          match e with
-            | BinaryExp3 (op, idc3_1, idc3_2) ->
-            | UnaryExp3 (op, idc3_1) -> 
-            (* TODO: need to match this?
-            | FieldAccess3 of id3 * id3
-            | Idc3Expr of idc3
-            | MdCall3 of id3 * (idc3 list) 
-            | ObjectCreate3 of string *)
+  let compare_idc3 (idc3_1) (idc3_2) : bool =
+    match (idc3_1, idc3_2) with
+      | (IntLiteral3 v1, IntLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (BoolLiteral3 v1, BoolLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (StringLiteral3 v1, StringLiteral3 v2) -> (Pervasives.compare v1 v2) == 0
+      | (Var3 v1, Var3 v2) -> (Pervasives.compare v1 v2) == 0
+  in
 
+  (* Op -> idc3_1, idc3_2, var_name *)
+  let cache_map = Hashtbl.create 100 in
+  let append_into_cache_map (e_stmts: enhanced_stmt list) (op: ir3_op) idc3_1 idc3_2 (var_name: id3) =
+    println_debug ("append_into_cache_map: " ^ var_name ^ " = " ^ (string_of_jlite_op op) ^ " " ^ (string_of_idc3 idc3_1) ^ " " ^ (string_of_idc3 idc3_2));
+    Hashtbl.add cache_map op (idc3_1, idc3_2, var_name);
+  in
+  
+  let last_def_of (e_stmts: enhanced_stmt list) (id3_1: id3) (from_line_number: int) =
+    let prev_defs = List.fold_left
+      (fun res e_stmt -> 
+        if e_stmt.line_number < from_line_number then
+          if (Id3Set.mem id3_1 e_stmt.defs) then
+            res @ [e_stmt]
+          else
+            res
+        else
+          res
+      )
+    [] (List.rev e_stmts) in
+    if (List.length prev_defs == 0) then
+      -1
+    else 
+      (List.hd prev_defs).line_number
+  in
+
+  Hashtbl.iter (fun k v -> 
+    List.iter 
+      (fun stmt -> 
+        println_debug ("Matching stmts " ^ (string_of_enhanced_stmt stmt));
+        match stmt.embedded_stmt with
+          AssignStmt3 (id3_res, e) -> 
+            begin
+            match e with
+              | BinaryExp3 (op, idc3_1, idc3_2) -> 
+                if Hashtbl.mem cache_map op then begin
+                  (* Contain entry in the map *)
+                  let filtered_ops = Hashtbl.find_all cache_map op in
+                  let same_ops = List.filter (fun (cache_idc3_1, cache_idc3_2, _) ->
+                    (compare_idc3 idc3_1 cache_idc3_1) && (compare_idc3 idc3_2 cache_idc3_2)
+                  ) filtered_ops in
+                  
+                  stmt.embedded_stmt <- AssignStmt3 (id3_res, e);
+                  if (List.length same_ops) == 0 then begin
+                    append_into_cache_map v.stmts op idc3_1 idc3_2 id3_res;
+                  end else
+                    match (List.hd same_ops) with
+                      | (_, _, id3_prev) ->
+                        (* TODO: Check last def of idc3_1 and idc3_2 *)
+                        (* Compare with last def of  *)
+                        stmt.embedded_stmt <- AssignStmt3 (id3_res, (Idc3Expr (Var3 id3_prev)))
+                end else begin
+                  append_into_cache_map v.stmts op idc3_1 idc3_2 id3_res;
+                end
+                  (* TODO: exclude variables that may be assigned more than once in the block *) 
+              (* | UnaryExp3 (op, idc3_1) ->  *)
+              (* TODO: need to match this?
+              | FieldAccess3 of id3 * id3
+              | Idc3Expr of idc3
+              | MdCall3 of id3 * (idc3 list) 
+               *)
+            | _ -> ()
+            end
+          | _ -> ()
       )
     v.stmts
-  ) basic_blocks_map; *)
+  ) basic_blocks_map;
   basic_blocks_map
 end
 
@@ -1027,7 +1268,11 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
   let basic_blocks_map = derive_basic_blocks e_stmts in
   let optimized_blocks_map = eliminate_local_common_subexpression basic_blocks_map in
-  let liveness_timeline = derive_liveness_timeline basic_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  let liveness_timeline = derive_liveness_timeline optimized_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  
+  let all_blocks = get_all_blocks optimized_blocks_map in
+  let all_stmts = get_all_stmts all_blocks in
+  let sorted_all_stmts = List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts) in
 
   (*
     let () = print_string (string_of_int (List.length liveness_timeline)) in
@@ -1048,15 +1293,17 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
-  let callee_save = STMFD (["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "lr"]) in
-  let fp_base_offset = 24 in
+  let saved_reg = ["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "lr"] in
+  let loaded_reg = ["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "pc"] in
+  let callee_save = STMFD (saved_reg) in
+  let fp_base_offset = 4 * ((List.length saved_reg) - 1) in
   let adjust_fp = ADD("", false, "fp", "sp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
   let local_var_stack_size = 4 * List.length localvars in
   let adjust_sp = SUB("", false, "sp", "fp", ImmedOp("#" ^ string_of_int (fp_base_offset + local_var_stack_size))) in
   let exit_label_str = fresh_label() in
   let exit_label_instr = Label(exit_label_str) in
   let restore_sp = SUB("", false, "sp", "fp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
-  let callee_load = LDMFD (["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "pc"]) in
+  let callee_load = LDMFD (loaded_reg) in
   let method_header = [Label mthd.id3] in
   let method_prefix = [callee_save; adjust_fp; adjust_sp] in
   let method_suffix = [exit_label_instr; restore_sp; callee_load] in
@@ -1072,7 +1319,16 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (*; print_string (string_of_int linfo.current_line)*) in linfo in
     
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
-  let ir3_stmt_partial stmt = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts stmt in
+  let ir3_stmt_partial stmt =
+    let new_linfo = get_next_line() in
+    let coms = [
+      EMPTY;
+      COM("line "^(string_of_int linfo.current_line)^": " ^ (string_of_ir3_stmt stmt));
+      COM("rallocs: " ^ (string_of_rallocs rallocs " "));
+    ] in
+    let ret = ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts sorted_all_stmts stmt in
+    coms @ ret
+  in
   
   let md_comments = gen_md_comments mthd stack_frame in
   begin
@@ -1091,7 +1347,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     let () = set_nth_below (min (List.length mthd.params3) 4) 0 in
     
     method_header @ md_comments @ method_prefix
-    @ (List.flatten (List.map ir3_stmt_partial mthd.ir3stmts))
+    @ (List.flatten (List.map ir3_stmt_partial sorted_all_stmts))
     @ method_suffix
     
   end

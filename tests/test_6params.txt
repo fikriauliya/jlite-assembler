@@ -1,6 +1,6 @@
 class Main {
 
-	void main(){
+	void main () {
 		Int a; 
 		Compute help;
 		Bool b;
@@ -8,22 +8,24 @@ class Main {
 		b = false;
 		b = ((!b) || false) && (b);
 		
-		if(help.add() == NULL ){
-			println("NULL return"); 
+		if (help.add() == NULL) {
+			println("NULL return\n"); 
 		}
-		else{
-			println("Not NULL return"); 
+		else {
+			println("Not NULL return\n"); 
 		}
 		
 		help = new Compute();
 		a = help.add(1,2,3,4,5);
 		
-		println("\nSum of 5 numbers:"); 
+		println("Sum of 5 numbers: "); 
 		println(a);
+		println("\n");
 		
 		a = help.add(-5,6,7,8,9);
-		println("\nSum of other 5 numbers:"); 
+		println("Sum of other 5 numbers: "); 
 		println(a);
+		println("\n");
 		
 		
 	}
@@ -35,11 +37,16 @@ class Compute {
 	Int y;
 	Int z;
 
-   Int add(Int a, Int b, Int c, Int d, Int e){
-     return (a + b + c + d - -e);
-   }   
-   
-   Compute add(){
-	return NULL;
-   }
+	Int add (Int a, Int b, Int c, Int d, Int e) {
+		println("Computing big addition...\n");
+		println(a);
+		println("\n");
+		println(e);
+		println("\n");
+		return (a + b + c + d - -e);
+	}   
+
+	Compute add () {
+		return NULL;
+	}
 }
