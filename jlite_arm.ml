@@ -469,20 +469,26 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     "a2", ref None;
     "a3", ref None;
     "a4", ref None;
-    "lr", ref None; (* invalidated after each call to bl and blx;
-      since we only use these for function calls, it is safe to use the register and reset it in reset_mtd_reg *)
+    
+    (* invalidated after each call to bl and blx; since we only use these for function calls,
+    it is safe to use the register and reset it in reset_mtd_reg *)
+    "lr", ref None; 
+    
     "v1", ref None;
     "v2", ref None;
     "v3", ref None;
     "v4", ref None;
     "v5", ref None;
+    
+    (* These register can be used for stack checking, but we assume we do no such thing *)
     "v6", ref None; (* sb/v6: Stack base / register variable 6 *)
     "v7", ref None; (* sl/v7 Stack limit / register variable 7 *)
+
   ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
-  let saved_reg = ["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "lr"] in
-  let loaded_reg = ["v1"; "v2"; "v3"; "v4"; "v5"; "fp"; "pc"] in
+  let saved_reg = ["v1"; "v2"; "v3"; "v4"; "v5"; "v6"; "v7"; "fp"; "lr"] in
+  let loaded_reg = ["v1"; "v2"; "v3"; "v4"; "v5"; "v6"; "v7"; "fp"; "pc"] in
   let callee_save = STMFD (saved_reg) in
   let fp_base_offset = 4 * ((List.length saved_reg) - 1) in
   let adjust_fp = ADD("", false, "fp", "sp", ImmedOp("#" ^ string_of_int fp_base_offset)) in
