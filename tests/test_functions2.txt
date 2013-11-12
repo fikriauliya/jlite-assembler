@@ -5,8 +5,7 @@ class Main {
 
         help = new Compute();
         a = help.add(1, 2);
-        println(a); // Should output 24
-        println("\n");
+        println(a); // Should output 3
     }
 }
 
