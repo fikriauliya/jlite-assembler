@@ -795,6 +795,7 @@ let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   | IntLiteral3 i ->  "#" ^ (string_of_int i), [] (*TODO: replace this stub*)
   | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), [] (*TODO: replace this stub*)
   | StringLiteral3 s ->  "#" ^ s, [] (*TODO: replace this stub*)
+  | Null3 ->  "#0", []
     
 (*
 let rec cdata3_from_id3 (localvars: var_decl3 list) (vid: id3) =
@@ -947,7 +948,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
   | MdCall3 (m_id, args) ->
     let mdargs_to_reg (idc: idc3) (dst: reg): (arm_instr list) = 
       match idc with
-      | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
+      | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ | Null3 -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
       | Var3 id3 ->
         begin
           match register_of_var rallocs id3 with
@@ -984,7 +985,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let mdargs_to_stack (idc: idc3) (arg_index: int): (arm_instr list) = 
       begin
         match idc with
-        | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
+        | IntLiteral3 _ | BoolLiteral3 _ | StringLiteral3 _ | Null3 -> failwith ("Give up! Modify IR3 generation to make it a variable first!!")
         | Var3 id3 ->
           let (var_reg, var_instr) = ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt id3 false in
           var_instr @ [STR("", "", var_reg, RegPreIndexed("sp", (arg_index)*(-4), false))]
