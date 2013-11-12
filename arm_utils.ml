@@ -1,6 +1,7 @@
 open Arm_structs
 open Ir3_structs
 open Printf
+open List
 
 
 (* Type corresponding to the position of an object inside a record
@@ -91,6 +92,29 @@ let register_of_var (rallocs: reg_allocations) (v: id3): (reg option) =
   with
   | Not_found -> None
 
+
+(* Update content of r to be new_var *)
+let update_rallocs_var_at_reg (rallocs: reg_allocations) (new_var: id3 option) (r: reg) =
+  try
+    let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in
+    let _ = (var_option := new_var) in ()
+  with
+  | Not_found -> failwith ("update_rallocs_var_at_reg: Invalid register name: " ^ r)
+
+
+let mtd_regs = ["a1";"a2";"a3";"a4"(*;"lr"*)]
+let reset_mtd_reg(*s*) rallocs =
+  (*
+  let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
+  let _ = update_rallocs_var_at_reg rallocs (None) "lr" in
+  *)
+  let _ = map (update_rallocs_var_at_reg rallocs (None)) mtd_regs in
+  ()
+
+
 let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations) (r: reg) =
   match var_of_register rallocs r with
   | Some v ->
@@ -100,3 +124,8 @@ let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations
   | None ->
     (* No other variable exists in a_x register, just load *)
     []
+
+let request_method_call_regs stack_frame rallocs : 'a list =
+  flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs)
+
+

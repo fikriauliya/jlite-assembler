@@ -143,18 +143,6 @@ let derive_stack_frame (clist: cdata3 list) (params: (var_decl3 list)) (localvar
   let _, vars_layout = derive_precise_layout clist ("", localvars) (-28) false in
   params_layout @ vars_layout
 
-let mtd_regs = ["a1";"a2";"a3";"a4"(*;"lr"*)]
-let reset_mtd_reg rallocs =
-  (*
-  let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
-  let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
-  let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
-  let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
-  let _ = update_rallocs_var_at_reg rallocs (None) "lr" in
-  *)
-  let _ = map (update_rallocs_var_at_reg rallocs (None)) mtd_regs in
-  ()
-
 
 let label3_to_arm lbl = "L" ^ (string_of_int lbl)
 
@@ -353,7 +341,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     result
   (* 4 *)
   | ObjectCreate3 class_name ->
-    let saves = flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs) in
+    let saves = request_method_call_regs stack_frame rallocs in
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
     let movinstr = MOV("",false,"a1",ImmedOp("#" ^ string_of_int objectSize)) in
     let blinstr = BL("","_Znwj(PLT)") in
@@ -390,7 +378,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
       let set_a1 value =
         LDR("","","a1",LabelAddr("=" ^ (Hashtbl.find string_table value)))
       in
-      let saves = flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs) in
+      let saves = request_method_call_regs stack_frame rallocs in
       let ret = saves @ (match idc3 with
       | StringLiteral3 str ->
         [set_a1 (str ^ "\\n")]
@@ -492,12 +480,12 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     (*"lr", ref None; (* invalidated after each call to bl and blx;
       since we only use these for function calls, it is safe to use the register and reset it in reset_mtd_reg *)*)
     "v1", ref None;
-    (*"v2", ref None;
+    "v2", ref None;
     "v3", ref None;
     "v4", ref None;
     "v5", ref None;
     "sb", ref None; (* v6 Stack base / register variable 6 *)
-    "sl", ref None; (* v7 Stack limit / register variable 7 *)*)
+    "sl", ref None; (* v7 Stack limit / register variable 7 *)
     (* TODO: use other registers for variables? *)
   ] in
   let localvars = mthd.localvars3 in
