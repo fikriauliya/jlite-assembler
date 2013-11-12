@@ -391,7 +391,6 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   println_debug "fill_in_in_blocks";
   fill_in_in_blocks ();
   basic_blocks_map
-  (* [] *)
 end
 
 let get_all_blocks basic_blocks_map =
@@ -456,8 +455,6 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
         let block_stmts = v.stmts in
         
         println_debug ("block_out_variables: " ^ (string_of_list (Id3Set.elements block_out_variables) (fun x -> x) ", "));
-        (* println_debug "block_stmts: "; *)
-        (* println_debug (string_of_list block_stmts string_of_enhanced_stmt " -> "); *)
 
         let (block_in_variables, is_in_changed) = List.fold_left 
           (fun ((succ_blocks_in_variables: Id3Set.t), is_in_changed) stmt ->
@@ -584,7 +581,6 @@ let derive_liveness_timeline (basic_blocks_map) (param_vars: id3 list) : livenes
   println "=============================================================";
 
   liveness_timeline_map
-  (*[("", (0,0))]*)
 end
 
 (* TODO rm
@@ -1267,8 +1263,9 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   
   let e_stmts = ir3stmts_to_enhanced_stmts mthd.ir3stmts in
   let basic_blocks_map = derive_basic_blocks e_stmts in
-  let optimized_blocks_map = eliminate_local_common_subexpression basic_blocks_map in
-  let liveness_timeline = derive_liveness_timeline optimized_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
+  (* TODO: enable this is flag is on: *)
+  let optimized_blocks_map = if true then basic_blocks_map else eliminate_local_common_subexpression basic_blocks_map in
+  let liveness_timeline = derive_liveness_timeline basic_blocks_map (List.map (fun x -> match x with (_, param_var) -> param_var) mthd.params3) in
   
   let all_blocks = get_all_blocks optimized_blocks_map in
   let all_stmts = get_all_stmts all_blocks in
