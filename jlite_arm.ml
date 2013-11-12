@@ -460,12 +460,16 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   | ReturnVoidStmt3 ->
     [B("", return_label)]
 
-let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) =
+let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) (linfo: lines_info) =
   [
     COM ("Function " ^ mthd.id3);
-    COM "Local variable offsets:";
+    COM "Local variable offsets and life intervals:";
   ]
-  @ List.map (fun (id,off) -> COM ("  " ^ id ^ " : " ^ (string_of_int off))) stack_frame
+  @ List.map (fun (id,off) -> COM (
+      "  " ^ id ^
+      " : " ^ (string_of_int off) ^
+      "   \t" ^ (string_of_timeline (Hashtbl.find linfo.timelines id))
+    )) stack_frame
   @ [EMPTY]
 
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
@@ -529,7 +533,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     coms @ ret
   in
   
-  let md_comments = gen_md_comments mthd stack_frame in
+  let md_comments = gen_md_comments mthd stack_frame linfo in
   begin
     (* Telling this function that some arguments are on registers *)
     (* Assuming 1st variable on a1, 2nd on a2 ..., 4th on a4 *)

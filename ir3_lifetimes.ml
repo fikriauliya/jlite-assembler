@@ -16,6 +16,8 @@ type lines_info = {
   (*timelines: (string, liveness_timeline_record) Hashtbl.t;*)
 }
 
+let string_of_timeline (tl: liveness_timeline_record) =
+	"[" ^ (string_of_int tl.start_line) ^ " - " ^ (string_of_int tl.end_line) ^ "]"
 
 type enhanced_stmt = {
   mutable embedded_stmt: ir3_stmt;
