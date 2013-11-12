@@ -6,6 +6,7 @@ open List
 
 
 let use_heuristic_for_spilling_registers = true
+and display_register_cleanings = false
 
 
 let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
@@ -72,7 +73,7 @@ let reset_mtd_reg(*s*) rallocs =
   let _ = map (update_rallocs_var_at_reg rallocs (None)) mtd_regs in
   ()
 
-
+(*
 let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations) (r: reg) =
   match var_of_register rallocs r with
   | Some v ->
@@ -82,16 +83,41 @@ let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations
   | None ->
     (* No other variable exists in a_x register, just load *)
     []
+*)
 
 let request_method_call_regs stack_frame rallocs : 'a list =
-  flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs)
+  let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations) (r: reg) =
+    match var_of_register rallocs r with
+    | Some v ->
+      (* Some other variable exists in a_x register, spill and load *)
+      store_variable stack_frame r v
+    | None ->
+      (* No other variable exists in a_x register, just load *)
+      []
+  in
+  let ret = flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs) in
+  let () = reset_mtd_reg rallocs in
+  ret
 
 
 
 
 
-
-
+let clean_registers linfo rallocs =
+  let is_alive vid =
+    let lness = Hashtbl.find linfo.timelines vid in
+    linfo.current_line <= lness.end_line
+  in
+  List.flatten (List.map (fun (regn,varn) -> match !varn with
+    | Some v ->
+      if not (is_alive v) then
+        let () = println("line "^(string_of_int linfo.current_line)^": freed "^regn^" from "^v) in
+        let () = varn := None in
+        if display_register_cleanings then [COM("freed "^regn)]*)
+        else []
+      else []
+    | None -> []
+  ) rallocs)
 
 
 (* 4 *)
@@ -125,6 +151,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
     else load_variable stack_frame regn varn
   in
   
+  (*
   let is_alive vid =
     let lness = Hashtbl.find linfo.timelines vid in
     linfo.current_line <= lness.end_line
@@ -141,9 +168,10 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
       | None -> []
     ) rallocs)
   in
+  *)
   
   let allocate_var var_id: (reg * (arm_instr list)) =
-    let free_com_instrs = clean_registers() in
+    let free_com_instrs = clean_registers linfo rallocs in
     let free (regn,varn) = match !varn with None -> true | Some _ -> false in
     if List.exists free rallocs then
       let (regn,varn) = List.find free (List.rev rallocs) in
@@ -172,7 +200,7 @@ let ir3_id3_to_arm  (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
       let () = spilled_var_ref := Some var_id in
       
       spilled_reg,
-      free_com_instrs @ store_instrs @ maybe_load spilled_reg var_id
+        free_com_instrs @ store_instrs @ maybe_load spilled_reg var_id
   in
   
   match get_var_register vid with

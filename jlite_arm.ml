@@ -289,7 +289,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index args)
     in
     let saves = request_method_call_regs stack_frame rallocs in
-    let () = reset_mtd_reg rallocs in
+(*    let () = reset_mtd_reg rallocs in *)
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
@@ -310,7 +310,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let movinstr = MOV("",false,"a1",ImmedOp("#" ^ string_of_int objectSize)) in
     let blinstr = BL("","_Znwj(PLT)") in
     let result = ("a1", saves @ [movinstr] @ [blinstr], []) in
-    let () = reset_mtd_reg rallocs in
+(*    let () = reset_mtd_reg rallocs in *)
     result
 
 let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
@@ -371,7 +371,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
       | _ -> failwith ("PrintStmt3: only supports variables and string or int literals")
       
       ) @ [BL("","printf(PLT)")] in
-      let () = reset_mtd_reg rallocs in
+(*      let () = reset_mtd_reg rallocs in *)
       ret
       
     end
@@ -506,13 +506,14 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   (*let ir3_stmt_partial = ir3_stmt_to_arm (get_next_line()) clist localvars rallocs exit_label_str stack_frame type_layouts mthd.ir3stmts in*)
   let ir3_stmt_partial stmt =
     let new_linfo = get_next_line() in
+    let clean = clean_registers linfo rallocs in
     let coms = [
       EMPTY;
       COM("line "^(string_of_int linfo.current_line)^": " ^ (string_of_ir3_stmt stmt));
       COM("rallocs: " ^ (string_of_rallocs rallocs " "));
     ] in
     let ret = ir3_stmt_to_arm new_linfo clist (mthd.params3 @ localvars) rallocs exit_label_str stack_frame type_layouts sorted_all_stmts stmt in
-    coms @ ret
+    coms @ clean @ ret
   in
   
   let md_comments = gen_md_comments mthd stack_frame linfo in
