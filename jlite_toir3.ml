@@ -233,16 +233,22 @@ let rec jlitestmts_to_IR3Stmts
       | ReturnVoidStmt ->  
         ([], [ReturnVoidStmt3])
       | AssignStmt (id,e) ->  
-        let (expr3,exprvars,exprstmts) = 
-          (jliteexpr_to_IR3Expr classid e false false) in 
+(*        let (expr3,exprvars,exprstmts) = 
+          (jliteexpr_to_IR3Expr classid e false false) in *)
         begin
-          let assignIR3 = match id with
-            | TypedVarId (id1,t,1) -> 
-              AssignFieldStmt3 (FieldAccess3 ("this",id1), expr3)
-            | TypedVarId (id1,_,2) | SimpleVarId id1 -> 
-              (AssignStmt3 (id1, expr3))
+          (*let assignIR3 = match id with*)
+          match id with
+            | TypedVarId (id1,t,1) ->
+              let (expr3,exprvars,exprstmts) =
+                (jliteexpr_to_IR3Expr classid e true true) in
+              let assignIR3 = AssignFieldStmt3 (FieldAccess3 ("this",id1), expr3)
+              in (exprvars, exprstmts@[assignIR3])
+            | TypedVarId (id1,_,2) | SimpleVarId id1 ->
+              let (expr3,exprvars,exprstmts) =
+                (jliteexpr_to_IR3Expr classid e false false) in
+              let assignIR3 = (AssignStmt3 (id1, expr3))
+              in (exprvars, exprstmts@[assignIR3])
             | _ -> failwith "Eror in IR3 expression generation." 
-          in (exprvars, exprstmts@[assignIR3])	
         end
       | AssignFieldStmt (id,e) ->  
         let (idIR3,idvars,idstmts) = 
