@@ -9,7 +9,10 @@ open List
 
 
 let debug_restrict_registers = false
+and use_asm_comments = false
 
+
+let make_EMPTY = if use_asm_comments then [] else [EMPTY]
 
 
 let labelcount = ref 0 
@@ -431,7 +434,7 @@ let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) (linfo: lines_in
       " : " ^ (string_of_int off) ^
       "   \t" ^ (string_of_timeline (Hashtbl.find linfo.timelines id))
     )) stack_frame
-  @ [EMPTY]
+  @ make_EMPTY
 
 let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   
@@ -513,8 +516,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let ir3_stmt_partial stmt =
     let new_linfo = get_next_line() in
     let clean = clean_registers linfo rallocs in
-    let coms = [
-      EMPTY;
+    let coms = make_EMPTY @ [
       COM("line "^(string_of_int linfo.current_line)^": " ^ (string_of_ir3_stmt stmt));
       COM("rallocs: " ^ (string_of_rallocs rallocs " "));
     ] in
@@ -552,10 +554,13 @@ let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_progr
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
   let textSegment = PseudoInstr ".text" in
   let mainExport = PseudoInstr ".global main" in
+  let rez =
       [dataSegment]
-    @ [EMPTY]
     @ string_table_to_arm
     @ [EMPTY]
     @ [textSegment; mainExport]
     @ (List.flatten (List.map ir3_method_partial (main_method :: methods)))
+  in if use_asm_comments
+  then filter (fun ins -> match ins with COM _ -> false | _ -> true) rez
+  else rez
 
