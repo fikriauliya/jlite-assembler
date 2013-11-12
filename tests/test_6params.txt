@@ -43,6 +43,10 @@ class Compute {
 		println("\n");
 		println(e);
 		println("\n");
+		println(a+b);
+		println("\n");
+		println(c+d);
+		println("\n");
 		return (a + b + c + d - -e);
 	}   
 
