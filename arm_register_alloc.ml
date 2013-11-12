@@ -16,14 +16,6 @@ let string_of_rallocs (rallocs: reg_allocations) (sep: string): string =
     (List.map (fun s -> match string_of_ralloc s with Some s -> [s] | _ -> []) rallocs)
   )
 
-(* Update content of r to be new_var *)
-let update_rallocs_var_at_reg (rallocs: reg_allocations) (new_var: id3 option) (r: reg) =
-  try
-    let (_, var_option) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in
-    let _ = (var_option := new_var) in ()
-  with
-  | Not_found -> failwith ("update_rallocs_var_at_reg: Invalid register name: " ^ r)
-
 (* Unassign var_name from src_reg and generate the arm instruction for that as well. *)
 let spill_variable (stack_frame: type_layout) (src_reg: reg) (*(var_name: id3)*) (rallocs: reg_allocations): arm_instr list =
   let var_name =
