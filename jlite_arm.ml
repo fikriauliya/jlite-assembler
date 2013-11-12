@@ -289,6 +289,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index args)
     in
     let saves = request_method_call_regs stack_frame rallocs in
+    let () = reset_mtd_reg rallocs in
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
@@ -301,7 +302,6 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let actual_call = BL("", m_id) in
     let result = ("a1", saves @ (prepare_args args) @ [allocate_args_stack] @ [actual_call] @ [deallocate_args_stack], []) in
     (* Set a1,a2,a3,a4 to free after function calls *)
-    let () = reset_mtd_reg rallocs in
     result
   (* 4 *)
   | ObjectCreate3 class_name ->
@@ -379,8 +379,8 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   | AssignDeclStmt3 (_, id, exp)
   (* 2 *)
   | AssignStmt3 (id, exp) ->
-    let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in (*ir3_id3_to_arm rallocs stack_frame stmts true in*) (* ir3_id3_partial stmt id in *)
     let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
+    let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in (*ir3_id3_to_arm rallocs stack_frame stmts true in*) (* ir3_id3_partial stmt id in *)
     if id_reg_dst = exp_reg_dst then (*and List.length exp_instr = 0*)
       id_instr @ exp_instr @ post_instr
     else
