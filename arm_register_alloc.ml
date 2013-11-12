@@ -4,8 +4,6 @@ open Ir3_structs
 open Ir3_lifetimes
 open List
 
-type reg_allocation = reg * id3 option ref
-type reg_allocations = (reg_allocation) list
 
 let string_of_ralloc ((reg, var): reg_allocation): string option =
   match !var with
@@ -25,24 +23,6 @@ let update_rallocs_var_at_reg (rallocs: reg_allocations) (new_var: id3 option) (
     let _ = (var_option := new_var) in ()
   with
   | Not_found -> failwith ("update_rallocs_var_at_reg: Invalid register name: " ^ r)
-
-
-let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
-  try
-    let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
-  with
-  | Not_found -> failwith ("var_of_register: Invalid register name: " ^ r)
-
-let register_of_var (rallocs: reg_allocations) (v: id3): (reg option) =
-  try
-    let (reg, _) = List.find (fun (_, var) -> match !var with
-    | Some var_name -> var_name = v
-    | None -> false
-    ) rallocs in
-    (Some reg)
-  with
-  | Not_found -> None
-
 
 (* Unassign var_name from src_reg and generate the arm instruction for that as well. *)
 let spill_variable (stack_frame: type_layout) (src_reg: reg) (*(var_name: id3)*) (rallocs: reg_allocations): arm_instr list =

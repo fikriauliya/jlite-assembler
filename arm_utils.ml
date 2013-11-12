@@ -8,6 +8,8 @@ open Printf
 *)
 type memory_address_offset = int
 
+type reg_allocation = reg * id3 option ref
+type reg_allocations = (reg_allocation) list
 
 type type_layout =
 (id3 * memory_address_offset) list
@@ -73,4 +75,28 @@ let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): ar
   let str = STR("", "", src_reg, RegPreIndexed("fp", offset, false)) in
   [str]
 
+let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
+  try
+    let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
+  with
+  | Not_found -> failwith ("var_of_register: Invalid register name: " ^ r)
 
+let register_of_var (rallocs: reg_allocations) (v: id3): (reg option) =
+  try
+    let (reg, _) = List.find (fun (_, var) -> match !var with
+    | Some var_name -> var_name = v
+    | None -> false
+    ) rallocs in
+    (Some reg)
+  with
+  | Not_found -> None
+
+let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations) (r: reg) =
+  match var_of_register rallocs r with
+  | Some v ->
+    (* Some other variable exists in a_x register, spill and load *)
+    (*spill_variable stack_frame r rallocs*)
+    store_variable stack_frame r v
+  | None ->
+    (* No other variable exists in a_x register, just load *)
+    []
