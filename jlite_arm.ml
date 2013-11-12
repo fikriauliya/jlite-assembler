@@ -8,6 +8,10 @@ open Printf
 open List
 
 
+let debug_restrict_registers = true
+
+
+
 let labelcount = ref 0 
 let fresh_label () = 
   (labelcount := !labelcount+1; ".L" ^ (string_of_int !labelcount))
@@ -117,11 +121,6 @@ let calc_obj_size (clist: (cdata3 list)) ((v_type, _): var_decl3) =
       4 * (List.length vars)
     end
   | _ -> failwith ("calc_object_size: This shouldn't happen")
-
-(* TODO rm
-let derive_active_spill_variable_set (liveness_timeline: liveness_timeline_type) =
-  ([], [])
-*)
 
 (* Note: This assumes the allocated objects will be alignes on a 4 bytes boundary! *)
 let derive_precise_layout (clist: cdata3 list) ((cname,decls): cdata3)
@@ -255,8 +254,6 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let (dstreg, dstinstr) = get_assigned_register currstmt in
     let cname = cname_from_id3 localvars var_id3 in
     let ldr_instr = LDR("", "", dstreg, RegPreIndexed(var_reg, get_field_offset cname type_layouts field_name_id3, false))
-      (* TODO: handle non-word fields; *)
-      (* TODO: how to get the variable type? *)
     in (dstreg, var_instr @ dstinstr @ [ldr_instr], [])
   (* 5 *)
   | MdCall3 (m_id, args) ->
@@ -469,14 +466,19 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   let all_stmts = get_all_stmts all_blocks in
   let sorted_all_stmts = List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts) in
   
-  (*let asvs = derive_active_spill_variable_set liveness_timeline in*)
-  let rallocs = [
+  let rallocs = if debug_restrict_registers then [
     "a1", ref None;
     "a2", ref None;
     "a3", ref None;
     "a4", ref None;
-    (*"lr", ref None; (* invalidated after each call to bl and blx;
-      since we only use these for function calls, it is safe to use the register and reset it in reset_mtd_reg *)*)
+    "v1", ref None;
+  ] else [
+    "a1", ref None;
+    "a2", ref None;
+    "a3", ref None;
+    "a4", ref None;
+    "lr", ref None; (* invalidated after each call to bl and blx;
+      since we only use these for function calls, it is safe to use the register and reset it in reset_mtd_reg *)
     "v1", ref None;
     "v2", ref None;
     "v3", ref None;
@@ -484,7 +486,6 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     "v5", ref None;
     "sb", ref None; (* v6 Stack base / register variable 6 *)
     "sl", ref None; (* v7 Stack limit / register variable 7 *)
-    (* TODO: use other registers for variables? *)
   ] in
   let localvars = mthd.localvars3 in
   (* Callee stack & register management *)
