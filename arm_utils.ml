@@ -20,6 +20,16 @@ module Id3Set = Set.Make(
   end 
 )
 
+
+(*
+(* Takes the first n element in a list and returns two list: those elements and the remaining ones *)
+let rec vertical_split n ls =
+  if n <= 0 then [], ls else match ls with
+    | h::rest -> let frst,scnd = take_first (n-1) in h::frst, scnd
+    | [] -> [], []
+*)
+
+
 (* Only be turned on for debugging *)
 let println_debug line = begin
   (* printf "%s\n" line; *)
