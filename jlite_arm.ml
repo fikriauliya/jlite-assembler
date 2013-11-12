@@ -348,24 +348,13 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     result
   (* 4 *)
   | ObjectCreate3 class_name ->
-    let request_reg r =
-      match var_of_register rallocs r with
-      | Some v -> (*let () = println(">>"^r^" "^v) in*)
-        (* Some other variable exists in a_x register, spill and load *)
-        (*spill_variable stack_frame r rallocs*)
-        store_variable stack_frame r v
-      | None ->
-        (* No other variable exists in a_x register, just load *)
-        []
-    in
-    let saves = flatten (map request_reg ["a1";"a2";"a3";"a4"]) in
+    let saves = flatten (map (request_method_call_reg stack_frame rallocs) ["a1";"a2";"a3";"a4"]) in
     let objectSize = calc_obj_size clist (ObjectT class_name, class_name) in
     let movinstr = MOV("",false,"a1",ImmedOp("#" ^ string_of_int objectSize)) in
     let blinstr = BL("","_Znwj(PLT)") in
     let result = ("a1", saves @ [movinstr] @ [blinstr], []) in
     let () = reset_mtd_reg rallocs in
     result
-      
 
 let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
     (localvars: var_decl3 list) (rallocs: reg_allocations) (return_label: label)
@@ -393,20 +382,10 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   (* 1 *)
   | PrintStmt3 idc3 ->
     begin
-      let request_reg r =
-        match var_of_register rallocs r with
-        | Some v -> (*let () = println(">>"^r^" "^v) in*)
-          (* Some other variable exists in a_x register, spill and load *)
-          (*spill_variable stack_frame r rallocs*)
-          store_variable stack_frame r v
-        | None ->
-          (* No other variable exists in a_x register, just load *)
-          []
-      in
       let set_a1 value =
         LDR("","","a1",LabelAddr("=" ^ (Hashtbl.find string_table value)))
       in
-      let saves = flatten (map request_reg ["a1";"a2";"a3";"a4"]) in
+      let saves = flatten (map (request_method_call_reg stack_frame rallocs) ["a1";"a2";"a3";"a4"]) in
       let ret = saves @ (match idc3 with
       | StringLiteral3 str ->
         [set_a1 str]
