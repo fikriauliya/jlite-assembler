@@ -72,7 +72,7 @@ let reset_mtd_reg(*s*) rallocs =
   let _ = map (update_rallocs_var_at_reg rallocs (None)) mtd_regs in
   ()
 
-
+(*
 let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations) (r: reg) =
   match var_of_register rallocs r with
   | Some v ->
@@ -82,10 +82,21 @@ let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations
   | None ->
     (* No other variable exists in a_x register, just load *)
     []
+*)
 
 let request_method_call_regs stack_frame rallocs : 'a list =
-  flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs)
-
+  let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations) (r: reg) =
+    match var_of_register rallocs r with
+    | Some v ->
+      (* Some other variable exists in a_x register, spill and load *)
+      store_variable stack_frame r v
+    | None ->
+      (* No other variable exists in a_x register, just load *)
+      []
+  in
+  let ret = flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs) in
+  let () = reset_mtd_reg rallocs in
+  ret
 
 
 

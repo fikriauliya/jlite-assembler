@@ -289,7 +289,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index args)
     in
     let saves = request_method_call_regs stack_frame rallocs in
-    let () = reset_mtd_reg rallocs in
+(*    let () = reset_mtd_reg rallocs in *)
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
@@ -310,7 +310,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let movinstr = MOV("",false,"a1",ImmedOp("#" ^ string_of_int objectSize)) in
     let blinstr = BL("","_Znwj(PLT)") in
     let result = ("a1", saves @ [movinstr] @ [blinstr], []) in
-    let () = reset_mtd_reg rallocs in
+(*    let () = reset_mtd_reg rallocs in *)
     result
 
 let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
@@ -371,7 +371,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
       | _ -> failwith ("PrintStmt3: only supports variables and string or int literals")
       
       ) @ [BL("","printf(PLT)")] in
-      let () = reset_mtd_reg rallocs in
+(*      let () = reset_mtd_reg rallocs in *)
       ret
       
     end
