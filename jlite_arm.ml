@@ -263,34 +263,10 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       | Var3 id3 ->
         begin
           match register_of_var rallocs id3 with
-          (* Argument already in register, just move *)
-          | Some r -> if r = dst then (* [] *) [make_move("", false, dst, RegOp(r))]
-            else
-              begin
-(*                let mov_arg_to_reg = [MOV("", false, dst, RegOp(r))] in*)
-                let mov_arg_to_reg = [make_move("", false, dst, RegOp(r))] in
-                match var_of_register rallocs dst with
-                | Some v ->
-                  (* Some other variable exists in a_x register, spill and move *)
-                  if v <> id3 then
-                    let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
-                    (spill_variable stack_frame dst rallocs) @ mov_arg_to_reg
-                  else (* [] *) [make_move("", false, v, RegOp(id3))]
-                | None ->
-                  (* No other variable exists in a_x register, just move *)
-                  let _ = update_rallocs_var_at_reg rallocs (Some id3) dst in
-                  mov_arg_to_reg
-              end
+          (* Argument already in register, just move as necessary *)
+          | Some r -> [make_move("", false, dst, RegOp(r))]
           (* Argument not in register yet, load *)
-          | None ->
-            match var_of_register rallocs dst with
-            | Some v ->
-              (* Some other variable exists in a_x register, spill and load *)
-              if v <> id3 then (spill_variable stack_frame dst rallocs) @ (unspill_variable stack_frame dst id3 rallocs)
-              else []
-            | None ->
-              (* No other variable exists in a_x register, just load *)
-              unspill_variable stack_frame dst id3 rallocs
+          | None -> load_variable stack_frame dst id3
         end
     in
     let mdargs_to_stack (idc: idc3) (arg_index: int) (args: idc3 list): (arm_instr list) =
@@ -305,7 +281,6 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let rec prepare_reg_args arg_index args =
       if (List.length args) <= arg_index || arg_index >= 4 then []
       else mdargs_to_reg (List.nth args arg_index) ("a" ^ string_of_int (arg_index+1)) @ (prepare_reg_args (arg_index + 1) args)
-      
     in
     let rec prepare_stack_args arg_index args =
       if (List.length args) <= arg_index then []
@@ -313,6 +288,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
        * Change if stack frame layout for parameter is changed. *)
       else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index args)
     in
+    let saves = request_method_call_regs stack_frame rallocs in
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
@@ -323,7 +299,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       end
     in
     let actual_call = BL("", m_id) in
-    let result = ("a1", (prepare_args args) @ [allocate_args_stack] @ [actual_call] @ [deallocate_args_stack], []) in
+    let result = ("a1", saves @ (prepare_args args) @ [allocate_args_stack] @ [actual_call] @ [deallocate_args_stack], []) in
     (* Set a1,a2,a3,a4 to free after function calls *)
     let () = reset_mtd_reg rallocs in
     result
@@ -448,7 +424,9 @@ let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) (linfo: lines_in
     COM ("Function " ^ mthd.id3);
     COM "Local variable offsets and life intervals:";
   ]
-  @ List.map (fun (id,off) -> COM (
+  @ List.map (fun (id,off) -> 
+      let _ = print_endline (id) in
+      COM (
       "  " ^ id ^
       " : " ^ (string_of_int off) ^
       "   \t" ^ (string_of_timeline (Hashtbl.find linfo.timelines id))
