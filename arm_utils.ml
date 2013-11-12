@@ -1,6 +1,7 @@
 open Arm_structs
 open Ir3_structs
 open Printf
+open List
 
 
 (* Type corresponding to the position of an object inside a record
@@ -23,6 +24,28 @@ module Id3Set = Set.Make(
 )
 
 
+let string_of_ralloc ((reg, var): reg_allocation): string option =
+  match !var with
+    | Some v -> Some (reg ^ "=" ^ v)
+    | None -> None
+
+let string_of_rallocs (rallocs: reg_allocations) (sep: string): string =
+  (*string_of_list rallocs string_of_ralloc sep*)
+  String.concat sep (List.flatten
+    (List.map (fun s -> match string_of_ralloc s with Some s -> [s] | _ -> []) rallocs)
+  )
+
+
+
+let argmax f ls = match ls with
+  | h::t ->
+  	fold_left (
+  	  fun (arg,max) x -> let fx = f x in
+  	  	if fx > max then (x,fx) else (arg,max)
+  	) (h, f h) ls
+  | [] -> failwith "Cannot use argmax with an empty list!"
+
+
 (*
 (* Takes the first n element in a list and returns two list: those elements and the remaining ones *)
 let rec vertical_split n ls =
@@ -35,7 +58,7 @@ let rec vertical_split n ls =
 (* Only be turned on for debugging *)
 let println_debug line = begin
   (* printf "%s\n" line; *)
-  (* TODO: remove all the printl's cluttering the code *)
+  (* TODO: remove all the println's cluttering the code *)
 end
 
 let println line = begin
@@ -44,8 +67,6 @@ end
 
 
 (* Returns the relative position of a field in an object of a given type
-  TODO
-  TODO also take the class as an argument
 *)
 let get_field_offset (cname: cname3) (type_layouts: (cname3 * type_layout) list) (field_name: id3) =
   let nam,lay = List.find (fun (nam,_) -> nam = cname) type_layouts in
@@ -75,28 +96,4 @@ let store_variable (stack_frame: type_layout) (src_reg: reg) (var_name: id3): ar
   let str = STR("", "", src_reg, RegPreIndexed("fp", offset, false)) in
   [str]
 
-let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
-  try
-    let (_, id3) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in !id3
-  with
-  | Not_found -> failwith ("var_of_register: Invalid register name: " ^ r)
 
-let register_of_var (rallocs: reg_allocations) (v: id3): (reg option) =
-  try
-    let (reg, _) = List.find (fun (_, var) -> match !var with
-    | Some var_name -> var_name = v
-    | None -> false
-    ) rallocs in
-    (Some reg)
-  with
-  | Not_found -> None
-
-let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations) (r: reg) =
-  match var_of_register rallocs r with
-  | Some v ->
-    (* Some other variable exists in a_x register, spill and load *)
-    (*spill_variable stack_frame r rallocs*)
-    store_variable stack_frame r v
-  | None ->
-    (* No other variable exists in a_x register, just load *)
-    []

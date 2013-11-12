@@ -9,23 +9,21 @@ class Main {
 		b = ((!b) || false) && (b);
 		
 		if (help.add() == NULL) {
-			println("NULL return\n"); 
+			println("NULL return"); 
 		}
 		else {
-			println("Not NULL return\n"); 
+			println("Not NULL return"); 
 		}
 		
 		help = new Compute();
 		a = help.add(1,2,3,4,5);
 		
-		println("Sum of 5 numbers: "); 
+		println("Sum of 5 numbers:"); 
 		println(a);
-		println("\n");
 		
 		a = help.add(-5,6,7,8,9);
-		println("Sum of other 5 numbers: "); 
+		println("Sum of other 5 numbers:"); 
 		println(a);
-		println("\n");
 		
 		
 	}
@@ -38,11 +36,12 @@ class Compute {
 	Int z;
 
 	Int add (Int a, Int b, Int c, Int d, Int e) {
-		println("Computing big addition...\n");
+		println("Computing big addition...");
 		println(a);
-		println("\n");
+		println(b);
+		println(c);
+		println(d);
 		println(e);
-		println("\n");
 		return (a + b + c + d - -e);
 	}   
 

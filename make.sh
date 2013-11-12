@@ -14,4 +14,4 @@ ocamlc -g -c ir3_lifetimes.ml
 ocamlc -g -c arm_register_alloc.ml
 ocamlc -g -c jlite_arm.ml
 ocamlc -g -c jlite_main.ml
-ocamlc -g -o program jlite_structs.cmo jlite_annotatedtyping.cmo jlite_toir3.cmo jlite_lexer.cmo jlite_parser.cmo ir3_structs.cmo arm_structs.cmo arm_utils.cmo arm_register_alloc.cmo ir3_lifetimes.cmo jlite_arm.cmo jlite_main.cmo
+ocamlc -g -o program jlite_structs.cmo jlite_annotatedtyping.cmo jlite_toir3.cmo jlite_lexer.cmo jlite_parser.cmo ir3_structs.cmo arm_structs.cmo arm_utils.cmo ir3_lifetimes.cmo arm_register_alloc.cmo jlite_arm.cmo jlite_main.cmo

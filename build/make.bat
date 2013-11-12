@@ -1,6 +1,8 @@
 @echo off
 rm main.cmo 2> null
 rm rez.exe 2> null
+REM rm arm_utils.cmi 2> null
+REM rm arm_register_alloc.cmi 2> null
 goto SIMPLIFIED
 ocamlc -g -c -o jlite_structs.cmo ../jlite_structs.ml
 ocamlyacc ../jlite_parser.mly 2> yaccout.txt
