@@ -44,88 +44,6 @@ let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame:
   | StringLiteral3 s ->  "#" ^ (get_from_string_table s), []
   | Null3 ->  "#0", []
 
-(*
-(* Adds a string literal to the string table, adds an int literal format specifier
- * if the is print stmt is true *)
-let add_idc3_to_string_table idc3 isPrintStmt =
-  begin
-    match idc3 with
-    | StringLiteral3 str ->
-      if Hashtbl.mem string_table str then () else
-        Hashtbl.add string_table str (fresh_string_label())
-    | Var3 _ | IntLiteral3 _ | BoolLiteral3 _ ->
-      if isPrintStmt && not (Hashtbl.mem string_table "%i\\n") then
-        Hashtbl.add string_table "%i\\n" (fresh_string_label())
-      else ()
-    | _ -> ()
-  end
-
-(* Adds a string literal to the string table if the expression contains a string literal *)
-let add_ir3_exp_to_string_table exp3 =
-  begin
-    match exp3 with
-    | BinaryExp3 (_,idc3,idc3') ->
-      add_idc3_to_string_table idc3 false;
-      add_idc3_to_string_table idc3' false
-    | UnaryExp3 (_,idc3) ->
-      add_idc3_to_string_table idc3 false
-    | Idc3Expr (idc3) ->
-      add_idc3_to_string_table idc3 false
-    | MdCall3 (_,idc3list) ->
-      let rec helper idc3s =
-        begin
-          match idc3s with
-          | [] ->
-            ()
-          | idc3::idc3s' ->
-            add_idc3_to_string_table idc3 false;
-            helper idc3s'
-        end
-      in helper idc3list
-    | _ ->
-      ()
-  end
-
-(* Adds a string literal to the string table if the stmt contains an expression
- * with a string literal or adds a int format specifier to the string table if
- * it is a print stmt with an int or integer variable *)
-let add_ir3_stmt_to_string_table stmt3 =
-  begin
-    match stmt3 with
-    | IfStmt3 (exp3,_) ->
-      add_ir3_exp_to_string_table exp3
-    | PrintStmt3 (idc3) ->
-      add_idc3_to_string_table idc3 true
-    | AssignStmt3 (_,exp3) ->
-      add_ir3_exp_to_string_table exp3
-    | AssignDeclStmt3 (_,_,exp3) ->
-      add_ir3_exp_to_string_table exp3
-    | AssignFieldStmt3 (exp3,exp3') ->
-      add_ir3_exp_to_string_table exp3;
-      add_ir3_exp_to_string_table exp3'
-    | MdCallStmt3 (exp3) -> 
-      add_ir3_exp_to_string_table exp3
-    | _ ->
-      ()
-  end
-
-(* Adds string literals and/or integer format specifier to the string table *)
-let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
-  
-  (* lol, the hell is this?
-    
-  let rec helper stmts =
-    begin
-      match stmts with
-      | [] -> ()
-      | s::stmts' ->
-        add_ir3_stmt_to_string_table s;
-        helper stmts'
-    end      
-  in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods)) *)
-  map add_ir3_stmt_to_string_table (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
-*)
-
 
 (*
  * Calculate the size of a variable. In fact, every variable has size 4 :)
@@ -405,27 +323,21 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   (* 1 *)
   | AssignDeclStmt3 (_, id, exp)
   (* 2 *)
-  | AssignStmt3 (id, exp) ->
-    let normal_assign () =
-      let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
-      let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in
-      if id_reg_dst = exp_reg_dst then
-        id_instr @ exp_instr @ post_instr
-      else
-        let result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
-        let _ = update_rallocs_var_at_reg rallocs (Some id) id_reg_dst in
-        id_instr @ exp_instr @ [result] @ post_instr
-    in
-    let str_assign s =
-      let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in
-      id_instr @ [LDR("", "", id_reg_dst, LabelAddr(get_from_string_table s))]
-    in begin
-      match exp with
-      | Idc3Expr idc -> ( match idc with
-        | StringLiteral3 s -> str_assign s
-        | _ -> normal_assign() )
-      | _ -> normal_assign()
-    end
+  | AssignStmt3 (id, exp) -> begin match exp with
+      | Idc3Expr (StringLiteral3 s) ->
+        let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in
+        id_instr @ [LDR("", "", id_reg_dst, LabelAddr(get_from_string_table s))]
+      | _ ->
+        let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
+        let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in
+        if id_reg_dst = exp_reg_dst then
+          id_instr @ exp_instr @ post_instr
+        else
+          let result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
+          let _ = update_rallocs_var_at_reg rallocs (Some id) id_reg_dst in
+          id_instr @ exp_instr @ [result] @ post_instr
+      end
+
   (* 2 *)
   | AssignFieldStmt3 (fla, exp) ->
     
