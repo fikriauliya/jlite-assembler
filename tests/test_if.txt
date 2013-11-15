@@ -1,0 +1,85 @@
+class TestIf
+{
+    void main (Int a) {
+        Bool b;
+        Int dummy1;
+        Int dummy2;
+        dummy1 = 1;
+        dummy2 = 2;
+        
+        if (dummy1 < dummy2) {
+            println("dummy1 < dummy2");
+        }
+        else {
+            println("dummy1 >= dummy2");
+        }
+        
+        if (dummy1 > dummy2) {
+            println("dummy1 > dummy2");
+        }
+        else {
+            println("dummy1 <= dummy2");
+        }
+        
+        if (dummy1 <= dummy2) {
+            println("dummy1 <= dummy2");
+        }
+        else {
+            println("dummy1 > dummy2");
+        }
+        
+        if (dummy1 >= dummy2) {
+            println("dummy1 >= dummy2");
+        }
+        else {
+            println("dummy1 < dummy2");
+        }
+        
+        if (dummy1 == dummy2) {
+            println("dummy1 == dummy2");
+        }
+        else {
+            println("dummy1 != dummy2");
+        }
+
+        if (dummy1 != dummy2) {
+            println("dummy1 != dummy2");
+        }
+        else {
+            println("dummy1 == dummy2");
+        }
+
+        if (true) {
+            println("true is true");
+        }
+        else {
+            println("true is not true");
+        }
+        
+        if (false) {
+            println("false is true");
+        }
+        else {
+            println("false is not true");
+        }
+        
+        if(true) {
+            if (true) {
+                println("true is true twice");
+            }
+            else {
+                println("true is not always true");
+            }
+        }
+        else {
+            println("true is false");
+        }
+        
+        b = true;
+        while(b) {
+            println("b is true");
+            b = false;
+        }
+        
+    }
+}
