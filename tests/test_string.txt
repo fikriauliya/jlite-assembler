@@ -1,8 +1,17 @@
 class TestString
 {
     void main () {
-        String s1;
-        s1 = "qqq";
-        println(s1);
+        String s;
+        Store store;
+        
+        s = "qqq";
+        println(s);
+        
+        store = new Store();
+        store.str = "ppp";
+        println(store.str);
     }
+}
+class Store {
+	String str;
 }
