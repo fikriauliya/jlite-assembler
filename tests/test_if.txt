@@ -2,6 +2,7 @@ class TestIf
 {
     void main (Int a) {
         Bool b;
+        Bool c;
         Int dummy1;
         Int dummy2;
         dummy1 = 1;
@@ -42,12 +43,14 @@ class TestIf
             println("dummy1 != dummy2");
         }
 
+/*
         if (dummy1 != dummy2) {
             println("dummy1 != dummy2");
         }
         else {
             println("dummy1 == dummy2");
         }
+        */
 
         if (true) {
             println("true is true");
@@ -75,11 +78,78 @@ class TestIf
             println("true is false");
         }
         
+        // Test if with boolean variable
         b = true;
-        while(b) {
+        if(b) {
             println("b is true");
-            b = false;
+        }
+        else {
+            println("b is false");
+        }
+
+        // Test if with unary not expression
+        if(!b) {
+            println("not b is true");
+        }
+        else {
+            println("not b is false");
         }
         
+        if(!!b) {
+            println("not not b is true");
+        }
+        else {
+            println("not not b is false");
+        }
+
+        // Test if with binary expression on 2 variables
+        b = true;
+        c = false;
+        if(b || c) {
+            println("b or c is true");
+        }
+        else {
+            println("b or c is false");
+        }
+        if(b && c) {
+            println("b and c is true");
+        }
+        else {
+            println("b and c is false");
+        }
+
+        // Test if with binary expression with 1 variable and 1 constant
+        b = true;
+        if(b || false) {
+            println("b or false is true");
+        }
+        else {
+            println("b or false is false");
+        }
+        if(b && false) {
+            println("b and false is true");
+        }
+        else {
+            println("b and false is false");
+        }
+
+        // Test if with '== true' and '== false'
+        // Parsing error!
+        /*
+        b = true;
+        if(b == true) {
+            println("b == true is true");
+        }
+        else {
+            println("b == true is false");
+        }
+        if(b == false) {
+            println("b == false is true");
+        }
+        else {
+            println("b == false is false");
+        }
+        */
+
     }
 }
