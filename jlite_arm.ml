@@ -231,7 +231,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
             relationalOpHelper "gt" "le"
           | ">=" ->
             relationalOpHelper "ge" "lt"
-          | "<>" ->
+          | "!=" ->
             relationalOpHelper "ne" "eq"
           | _ -> failwith ("Relational operand not supported")
         end
