@@ -43,14 +43,12 @@ class TestIf
             println("dummy1 != dummy2");
         }
 
-/*
         if (dummy1 != dummy2) {
             println("dummy1 != dummy2");
         }
         else {
             println("dummy1 == dummy2");
         }
-        */
 
         if (true) {
             println("true is true");
@@ -131,6 +129,20 @@ class TestIf
         }
         else {
             println("b and false is false");
+        }
+
+        // Test if with binary expression with 2 constants
+        if(true || false) {
+            println("true or false is true");
+        }
+        else {
+            println("true or false is false");
+        }
+        if(true && false) {
+            println("true and false is true");
+        }
+        else {
+            println("true and false is false");
         }
 
         // Test if with '== true' and '== false'
