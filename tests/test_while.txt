@@ -30,7 +30,6 @@ class TestWhile
             a = a + 1;
         }
         
-        /*
         while(false) {
             println("this shouldn't be printed");
         }
@@ -38,6 +37,5 @@ class TestWhile
         while(true) {
             println("this should print forever");
         }
-        */
     }
 }
