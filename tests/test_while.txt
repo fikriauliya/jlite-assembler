@@ -4,12 +4,14 @@ class TestWhile
         Int a;
         Int b;
         
+        println("Loop with comparison with constant");
         a = 10;
         while(a > 0) {
             println(a);
             a = a - 1;
         }
         
+        println("Loop with comparison between variables");
         a = 10;
         b = 0;
         while(a > b) {
@@ -17,6 +19,18 @@ class TestWhile
             b = b + 1;
         }
         
+        println("Testing nested loop");
+        a = 0;
+        while(a < 10) {
+            b = 0;
+            while(b < 10) {
+                println(a + b);
+                b = b + 1;
+            }
+            a = a + 1;
+        }
+        
+        /*
         while(false) {
             println("this shouldn't be printed");
         }
@@ -24,5 +38,6 @@ class TestWhile
         while(true) {
             println("this should print forever");
         }
+        */
     }
 }
