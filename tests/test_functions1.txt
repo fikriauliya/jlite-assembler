@@ -24,7 +24,7 @@ void main(){
 		// Should be the output
 	}
 	else{
-		println("Square of d larger than sum of squares");
+		println("Square of d not larger than sum of squares");
 	}
 	
 	// Compute Factorial

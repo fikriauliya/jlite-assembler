@@ -13,7 +13,7 @@ class FieldAccessMain {
 		
 		temp = (f.a + b) *2; // Field read. Result should be (18 + 7) *2 = 50
 		
-		println (temp); // Should output 36
+		println (temp); // Should output 50
 	}
 }
 
