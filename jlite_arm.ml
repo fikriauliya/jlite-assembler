@@ -26,14 +26,33 @@ let fresh_string_label () =
 (* Contains the string literals and format specifiers *)
 let string_table = Hashtbl.create 100
 
+let get_from_string_table str =
+  if Hashtbl.mem string_table str
+    then Hashtbl.find string_table str
+    else
+      let lbl = fresh_string_label() in
+      let () = Hashtbl.add string_table str lbl in
+      lbl
+
+(* 2 *)
+let ir3_idc3_to_arm (linfo: lines_info) (rallocs: reg_allocations) (stack_frame: type_layout)
+    (stmts: ir3_stmt list) (currstmt: ir3_stmt) (vidc3: idc3): (reg * (arm_instr list)) =
+  match vidc3 with
+  | Var3 vid -> ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt vid false
+  | IntLiteral3 i ->  "#" ^ (string_of_int i), []
+  | BoolLiteral3 b ->  "#" ^ (if b = true then "1" else "0"), []
+  | StringLiteral3 s ->  "#" ^ (get_from_string_table s), []
+  | Null3 ->  "#0", []
+
+(*
 (* Adds a string literal to the string table, adds an int literal format specifier
  * if the is print stmt is true *)
 let add_idc3_to_string_table idc3 isPrintStmt =
   begin
     match idc3 with
     | StringLiteral3 str ->
-      if Hashtbl.mem string_table (str ^ "\\n") then () else
-        Hashtbl.add string_table (str ^ "\\n") (fresh_string_label())
+      if Hashtbl.mem string_table str then () else
+        Hashtbl.add string_table str (fresh_string_label())
     | Var3 _ | IntLiteral3 _ | BoolLiteral3 _ ->
       if isPrintStmt && not (Hashtbl.mem string_table "%i\\n") then
         Hashtbl.add string_table "%i\\n" (fresh_string_label())
@@ -92,16 +111,21 @@ let add_ir3_stmt_to_string_table stmt3 =
 
 (* Adds string literals and/or integer format specifier to the string table *)
 let add_ir3_program_to_string_table ((classes, main_method, methods): ir3_program) =
+  
+  (* lol, the hell is this?
+    
   let rec helper stmts =
     begin
       match stmts with
-      | [] ->
-        ()
+      | [] -> ()
       | s::stmts' ->
         add_ir3_stmt_to_string_table s;
         helper stmts'
     end      
-  in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
+  in helper (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods)) *)
+  map add_ir3_stmt_to_string_table (List.flatten (main_method.ir3stmts :: List.map (fun m -> m.ir3stmts) methods))
+*)
+
 
 (*
  * Calculate the size of a variable. In fact, every variable has size 4 :)
@@ -348,7 +372,7 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   | PrintStmt3 idc3 ->
     begin
       let set_a1 value =
-        LDR("","","a1",LabelAddr("=" ^ (Hashtbl.find string_table value)))
+        LDR("","","a1",LabelAddr(get_from_string_table value))
       in
       let saves = request_method_call_regs stack_frame rallocs in
       let ret = saves @ (match idc3 with
@@ -361,7 +385,10 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
         (set_a1 "%i\\n") :: [MOV("",false,"a2",ImmedOp("#" ^ (string_of_int (int_of_bool b))))]
       | Var3 id3 ->
         let dst = "a2" in
-        (set_a1 "%i\\n") ::
+        let a1 =
+          let t,_ = List.find (fun (_,id) -> id = id3) localvars in
+            match t with StringT -> set_a1 "%s\\n" | _ -> set_a1 "%i\\n"
+        in a1 ::
         (
           match register_of_var rallocs id3 with
           | Some r ->
@@ -379,14 +406,26 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   | AssignDeclStmt3 (_, id, exp)
   (* 2 *)
   | AssignStmt3 (id, exp) ->
-    let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
-    let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in
-    if id_reg_dst = exp_reg_dst then
-      id_instr @ exp_instr @ post_instr
-    else
-      let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
-      let _ = update_rallocs_var_at_reg rallocs (Some id) id_reg_dst in
-      id_instr @ exp_instr @ [move_result] @ post_instr
+    let normal_assign () =
+      let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
+      let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in
+      if id_reg_dst = exp_reg_dst then
+        id_instr @ exp_instr @ post_instr
+      else
+        let result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
+        let _ = update_rallocs_var_at_reg rallocs (Some id) id_reg_dst in
+        id_instr @ exp_instr @ [result] @ post_instr
+    in
+    let str_assign s =
+      let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in
+      id_instr @ [LDR("", "", id_reg_dst, LabelAddr(get_from_string_table s))]
+    in begin
+      match exp with
+      | Idc3Expr idc -> ( match idc with
+        | StringLiteral3 s -> str_assign s
+        | _ -> normal_assign() )
+      | _ -> normal_assign()
+    end
   (* 2 *)
   | AssignFieldStmt3 (fla, exp) ->
     
@@ -544,9 +583,10 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
   end
 
 let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_program =
-  add_ir3_program_to_string_table (classes, main_method, methods);
+  (*add_ir3_program_to_string_table (classes, main_method, methods);*)
   let ir3_method_partial = ir3_method_to_arm classes in
   let dataSegment = PseudoInstr ".data" in
+  let methods_arm = List.flatten (List.map ir3_method_partial (main_method :: methods)) in
   let string_table_to_arm = Hashtbl.fold 
     (fun k v r -> [Label v] @ [PseudoInstr (".asciz \"" ^ k ^ "\"")] @ r) string_table [] in
   let textSegment = PseudoInstr ".text" in
@@ -556,8 +596,9 @@ let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_progr
     @ string_table_to_arm
     @ [EMPTY]
     @ [textSegment; mainExport]
-    @ (List.flatten (List.map ir3_method_partial (main_method :: methods)))
+    @ methods_arm
   in if use_asm_comments
   then filter (fun ins -> match ins with COM _ -> false | _ -> true) rez
   else rez
+
 

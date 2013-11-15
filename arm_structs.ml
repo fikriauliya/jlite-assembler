@@ -90,7 +90,7 @@ type arm_program = arm_instr list
 
 let string_of_address_type s =
   match s with
-  | LabelAddr l -> l
+  | LabelAddr l -> "=" ^ l
   | Reg r -> r
   | RegPreIndexed (r, off, write) -> 
     "["^ r ^ ",#"^ (string_of_int off) 
