@@ -1,4 +1,4 @@
-class P2
+class TestString
 {
     void main () {
         String s1;
