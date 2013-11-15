@@ -1,0 +1,8 @@
+class P2
+{
+    void main () {
+        String s1;
+        s1 = "qqq";
+        println(s1);
+    }
+}
