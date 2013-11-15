@@ -252,7 +252,7 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       | _ -> failwith ("Operator not supported")
     end
   (* 4 *)
-  | FieldAccess3 (var_id3, field_name_id3) -> (*failwith ("ir3_exp_to_arm: EXPRESSION NOT IMPLEMENTED: " ^ string_of_ir3_exp e)*)
+  | FieldAccess3 (var_id3, field_name_id3) ->
     let (var_reg, var_instr) = ir3_id3_to_arm linfo rallocs stack_frame stmts currstmt var_id3 false in
     let (dstreg, dstinstr) = get_assigned_register currstmt in
     let cname = cname_from_id3 localvars var_id3 in
@@ -292,7 +292,6 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
       else (prepare_stack_args (arg_index + 1) args) @ (mdargs_to_stack (List.nth args arg_index) arg_index args)
     in
     let saves = request_method_call_regs stack_frame rallocs in
-(*    let () = reset_mtd_reg rallocs in *)
     let allocate_args_stack = SUB("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let deallocate_args_stack = ADD("", false, "sp", "sp", ImmedOp("#" ^ string_of_int (4 * List.length args))) in
     let prepare_args args = 
@@ -313,7 +312,6 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
     let movinstr = MOV("",false,"a1",ImmedOp("#" ^ string_of_int objectSize)) in
     let blinstr = BL("","_Znwj(PLT)") in
     let result = ("a1", saves @ [movinstr] @ [blinstr], []) in
-(*    let () = reset_mtd_reg rallocs in *)
     result
 
 let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
@@ -374,7 +372,6 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
       | _ -> failwith ("PrintStmt3: only supports variables and string or int literals")
       
       ) @ [BL("","printf(PLT)")] in
-(*      let () = reset_mtd_reg rallocs in *)
       ret
       
     end
@@ -383,8 +380,8 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
   (* 2 *)
   | AssignStmt3 (id, exp) ->
     let (exp_reg_dst, exp_instr, post_instr) = ir3_exp_partial stmt exp in
-    let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in (*ir3_id3_to_arm rallocs stack_frame stmts true in*) (* ir3_id3_partial stmt id in *)
-    if id_reg_dst = exp_reg_dst then (*and List.length exp_instr = 0*)
+    let (id_reg_dst, id_instr) = ir3_id3_partial stmt id true in
+    if id_reg_dst = exp_reg_dst then
       id_instr @ exp_instr @ post_instr
     else
       let move_result = MOV("", false, id_reg_dst, RegOp(exp_reg_dst)) in
@@ -453,7 +450,7 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     @ e_stmts
   in
   let basic_blocks_map = derive_basic_blocks e_stmts_and_declarations in
-  (* TODO: enable this is flag is on: *)
+  (* TODO: enable this if flag is on: *)
   let optimized_blocks_map = if true then basic_blocks_map else eliminate_local_common_subexpression basic_blocks_map in
   let liveness_timeline = derive_liveness_timeline basic_blocks_map in
   
