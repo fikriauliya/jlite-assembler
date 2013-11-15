@@ -1,0 +1,8 @@
+class TestString
+{
+    void main () {
+        String s1;
+        s1 = "qqq";
+        println(s1);
+    }
+}

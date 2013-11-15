@@ -1,0 +1,28 @@
+class TestWhile
+{
+    void main () {
+        Int a;
+        Int b;
+        
+        a = 10;
+        while(a > 0) {
+            println(a);
+            a = a - 1;
+        }
+        
+        a = 10;
+        b = 0;
+        while(a > b) {
+            println(b);
+            b = b + 1;
+        }
+        
+        while(false) {
+            println("this shouldn't be printed");
+        }
+        
+        while(true) {
+            println("this should print forever");
+        }
+    }
+}
