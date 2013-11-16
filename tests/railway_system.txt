@@ -14,15 +14,15 @@ class Main {
         station2 = new TrackComponent();
         station3 = new TrackComponent();
         station1.init("station1",false,true,0);
-        station1.init("station2",false,true,1);
-        station1.init("station3",false,true,2);
+        station2.init("station2",false,true,1);
+        station3.init("station3",false,true,2);
 
         straight1 = new TrackComponent();
         straight2 = new TrackComponent();
         straight3 = new TrackComponent();
         straight1.init("straight1",false,false,3);
-        straight2.init("straight1",false,false,4);
-        straight3.init("straight1",false,false,5);
+        straight2.init("straight2",false,false,4);
+        straight3.init("straight3",false,false,5);
 
         intersection = new TrackComponent();
         intersection.init("intersection",false,false,6);
