@@ -1,0 +1,162 @@
+dummy1 < dummy2
+dummy1 <= dummy2
+dummy1 <= dummy2
+dummy1 < dummy2
+dummy1 != dummy2
+dummy1 != dummy2
+true is true
+false is not true
+true is true twice
+b is true
+not b is false
+not not b is true
+b or c is true
+b and c is false
+b or false is true
+b and false is false
+true or false is true
+true and false is false
+field is working fine in if expression
+method call is working fine in if expression
+Loop with comparison with constant
+10
+9
+8
+7
+6
+5
+4
+3
+2
+1
+Loop with comparison between variables
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+Testing nested loop
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
+this should print forever
