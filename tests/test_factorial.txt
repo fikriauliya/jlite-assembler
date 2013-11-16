@@ -1,0 +1,45 @@
+class TestFactorial
+{
+    void main () {
+        FactorialRecursive fr;
+        FactorialIterative fi;
+        fr = new FactorialRecursive();
+        fi = new FactorialIterative();
+        
+        println(fr.calc(5)); // Should be 120
+        println(fi.calc(5)); // Should be 120 as well
+        
+        if (fr.calc(10) == fi.calc(10)) {
+            println(fr.calc(10));
+            println("factorial and iterative give same result");
+        }
+        else {
+            println(fr.calc(10));
+            println(fi.calc(10));
+            println("factorial and iterative give different result");
+        }
+    }
+}
+
+class FactorialRecursive {
+	Int calc(Int a) {
+	    if(a <= 1) {
+	        return 1;
+	    }
+	    else {
+	        return a * this.calc(a-1);
+	    } 
+	}
+}
+
+class FactorialIterative {
+    Int calc(Int a) {
+        Int result;
+        result = 1;
+        while(a >= 1) {
+            result = result * a;
+            a = a - 1;
+        }
+        return result;
+    }
+}
