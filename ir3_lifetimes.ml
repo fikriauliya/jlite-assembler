@@ -2,7 +2,6 @@ open Arm_utils
 open Ir3_structs
 open Jlite_structs
 
-(*type liveness_timeline_type = ((id3 * (int * int)) list)*)
 type liveness_timeline_record = {
   variable_name: id3;
   mutable start_line: int;
@@ -13,7 +12,6 @@ type liveness_timeline_type = (string, liveness_timeline_record) Hashtbl.t
 type lines_info = {
   mutable current_line: int;
   timelines: liveness_timeline_type;
-  (*timelines: (string, liveness_timeline_record) Hashtbl.t;*)
 }
 
 let string_of_timeline (tl: liveness_timeline_record) =
@@ -155,7 +153,6 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
           split_into_blocks rests [] labeled_block_id non_labeled_block_id true true
         end
         | IfStmt3 (_, label) -> begin
-          (* println_debug "IfStmt3 | GoTo3"; *)
           let next_block_id = (non_labeled_block_id - 1) in
           if (skip) then ()
           else 
