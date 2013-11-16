@@ -3,10 +3,14 @@ class TestIf
     void main (Int a) {
         Bool b;
         Bool c;
+        SomeClass sc;
         Int dummy1;
         Int dummy2;
+
         dummy1 = 1;
         dummy2 = 2;
+        sc = new SomeClass();
+        sc.b = true;
         
         if (dummy1 < dummy2) {
             println("dummy1 < dummy2");
@@ -145,6 +149,22 @@ class TestIf
             println("true and false is false");
         }
 
+        // Test if expression with fields
+        if(sc.b) {
+            println("field is working fine in if expression");
+        }
+        else {
+            println("field is not working in if expression");
+        }
+
+        // Test if expression with method calls
+        if(sc.doSomething()) {
+            println("method call is working fine in if expression");
+        }
+        else {
+            println("method call is not working in if expression");
+        }
+
         // Test if with '== true' and '== false'
         // Parsing error!
         /*
@@ -163,5 +183,13 @@ class TestIf
         }
         */
 
+    }
+}
+
+class SomeClass
+{
+    Bool b;
+    Bool doSomething() {
+        return true;
     }
 }
