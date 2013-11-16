@@ -1,0 +1,163 @@
+class TestOop
+{
+    void main()
+    {
+        Person h;
+        Person j;
+        Person l;
+        Person p;
+        ToiletSeatPreference up;
+        ToiletSeatPreference down;
+        ToiletSeatPreference left;
+        ToiletSeatPreference right;
+        Case c1;
+        Case c2;
+        Case c3;
+        Case c4;
+        
+        up = new ToiletSeatPreference();
+        down = new ToiletSeatPreference();
+        left = new ToiletSeatPreference();
+        right = new ToiletSeatPreference();
+        up.dir = "Up";
+        down.dir = "Down";
+        left.dir = "Left";
+        right.dir = "Right";
+        
+        h = new Person();
+        h.name = "Heryandi";
+        h.secretIdentity = "Superman";
+        h.assignedQuote = "I can fly! I can FLYYY!";
+        h.successQuote = "It's cold up there";
+        h.pref = up;
+        
+        j = new Person();
+        j.name = "Jesper";
+        j.secretIdentity = "Batman";
+        j.assignedQuote = "It's BATMAN ok? Not BADMAN!";
+        j.successQuote = "See? I'm not bad";
+        j.pref = down;
+        
+        l = new Person();
+        l.name = "Lionel";
+        l.secretIdentity = "Ironman";
+        l.assignedQuote = "Leave the ironing to me, the IRONMAN!!!";
+        l.successQuote = "Nothing a specialist like me can't handle!";
+        l.pref = left;
+        
+        p = new Person();
+        p.name = "Pahlevi";
+        p.secretIdentity = "Thor";
+        p.assignedQuote = "With great power comes great electricity bill";
+        p.successQuote = "Here is the bill";
+        p.pref = right;
+
+        println("");
+        
+        c1 = new Case();
+        c1.content = "Get a cat down from 3000km tree";
+        c1.solved = false;
+        h.assignCase(c1);
+        
+        c2 = new Case();
+        c2.content = "Take care of the bat population in the bat cave";
+        c2.solved = false;
+        j.assignCase(c2);
+        
+        c3 = new Case();
+        c3.content = "Iron the laundry";
+        c3.solved = false;
+        l.assignCase(c3);
+        
+        c4 = new Case();
+        c4.content = "Take care of the daily power outage in some parts of Indonesia";
+        c4.solved = false;
+        p.assignCase(c4);
+        
+        println("");
+        c1.solve();
+        c2.solve();
+        c3.solve();
+        c4.solve();
+        
+        println("");
+        println("Case list");
+        c1.printString();
+        c2.printString();
+        c3.printString();
+        c4.printString();
+        
+        println("Superhero profile:");
+        h.printString();
+        println("");
+        j.printString();
+        println("");
+        l.printString();
+        println("");
+        p.printString();
+        println("");
+    }
+}
+
+class Case
+{
+    Person assignee;
+    String content;
+    Bool solved;
+        
+    void solve() {
+        this.solved = true;
+        println("Case:");
+        println(content);
+        println("Solved by superhero:");
+        println(assignee.secretIdentity);
+        println("Remark by superhero:");
+        println(assignee.successQuote);
+    }
+    
+    void printString() {
+        println("Case:");
+        println(content);
+        println("Solved?");
+        println(solved);
+        println("Assigned to:");
+        println(assignee.secretIdentity);
+    }
+}
+
+class Person
+{
+    String name;
+    String secretIdentity;
+    String assignedQuote;
+    String successQuote;
+    ToiletSeatPreference pref;
+    
+    void assignCase(Case c) {
+        c.assignee = this;
+        println("Case: ");
+        println(c.content);
+        println("Assigned to: ");
+        println(secretIdentity);
+        println("Assurance from superhero:");
+        println(assignedQuote);
+    }
+    
+    void printString() {
+        println("Name: ");
+        println(name);
+        println("Secret identity: ");
+        println(secretIdentity);
+        println("Toilet seat preference: ");
+        println(pref.toString());
+    }
+}
+
+class ToiletSeatPreference
+{
+    String dir;
+    
+    String toString() {
+        return dir;
+    }
+}
