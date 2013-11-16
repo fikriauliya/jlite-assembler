@@ -11,6 +11,14 @@ class TestString
         store = new Store();
         store.str = "ppp";
         println(store.str);
+
+        // Test reassign string
+        s1 = "aaa";
+        println(s1);
+        s1 = "aaaaaa";
+        println(s1);
+        s1 = "aaa";
+        println(s1);
         
         // Type-check error!
         /*
