@@ -7,6 +7,13 @@ Some optimizations are done in register allocation and lifetime analysis.
 
 Instructions
 ============
+Most important files:
+- arm_register_alloc: Register allocation.
+- arm_utils: Utility functions.
+- ir3_lifetimes: Liveness analysis.
+- ir3_structs: More user-friendly output.
+- jlite_arm: convert ir3 to ARM assembly.
+
 Compilation: ./make.sh
 Test cases: Located under tests/ folder.
 
