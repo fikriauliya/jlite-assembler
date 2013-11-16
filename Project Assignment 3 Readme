@@ -16,6 +16,7 @@ Most important files:
 
 Compilation: ./make.sh
 Test cases: Located under tests/ folder.
+Expected outputs: Located under outputs/ folder.
 
 Register allocation & stack management
 ======================================
