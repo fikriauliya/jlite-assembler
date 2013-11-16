@@ -162,9 +162,24 @@ let rec ir3_exp_to_arm  (linfo: lines_info)
           | "+" ->
             let instr = ADD("", false, dstreg, op1reg, RegOp(op2reg)) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
-          | "*" ->
-            let instr = MUL("", false, dstreg, op1reg, op2reg) in
-            (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+          
+          | "*" -> if dstreg <> op1reg
+            then
+              let instr = MUL("", false, dstreg, op1reg, op2reg) in
+              (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+            else if op1reg <> op2reg then
+              let instr = MUL("", false, dstreg, op2reg, op1reg) in
+              (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])
+            else
+              let intermediate_reg = if op1reg = "a1" then "a2" else "a1" in
+              let intermediate_instr = match var_of_register rallocs intermediate_reg with
+                | Some v -> let () = update_rallocs_var_at_reg rallocs None intermediate_reg in
+                  store_variable stack_frame intermediate_reg v
+                | None -> [] in
+              let instrs = [MUL("", false, intermediate_reg, op1reg, op2reg);
+                make_move("", false, dstreg, RegOp(intermediate_reg))] in
+              (dstreg, op1instr @ op2instr @ dstinstr @ intermediate_instr @ instrs, [])
+            
           | "-" ->
             let instr = SUB("", false, dstreg, op1reg, RegOp(op2reg)) in
             (dstreg, op1instr @ op2instr @ dstinstr @ [instr], [])

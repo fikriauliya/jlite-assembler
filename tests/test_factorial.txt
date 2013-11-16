@@ -16,7 +16,7 @@ class TestFactorial
         else {
             println(fr.calc(10));
             println(fi.calc(10));
-            println("factorial and iterative give different result");
+            println("recursive and iterative give different result");
         }
     }
 }
