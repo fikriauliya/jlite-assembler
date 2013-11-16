@@ -388,14 +388,14 @@ let ir3_stmt_to_arm (linfo: lines_info) (clist: cdata3 list)
 let gen_md_comments (mthd: md_decl3) (stack_frame: type_layout) (linfo: lines_info) =
   [
     COM ("Function " ^ mthd.id3);
-    COM "Local variable offsets and life intervals:";
+    COM "Local variable offsets and line of death:";
   ]
   @ List.map (fun (id,off) -> 
       let _ = print_endline (id) in
       COM (
       "  " ^ id ^
       " : " ^ (string_of_int off) ^
-      "   \t" ^ (string_of_timeline (Hashtbl.find linfo.timelines id))
+      "   \tl. " ^ (string_of_int (Hashtbl.find linfo.timelines id).end_line) (*(string_of_timeline (Hashtbl.find linfo.timelines id))*)
     )) stack_frame
   @ make_EMPTY
 
