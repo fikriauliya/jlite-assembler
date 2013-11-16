@@ -1,0 +1,267 @@
+class TestIfWhile
+{
+    void main (Int a) {
+        TestIf ti;
+        TestWhile tw;
+        
+        ti = new TestIf();
+        tw = new TestWhile();
+        
+        ti.test();
+        tw.test();
+        
+        
+    }
+}
+
+class TestIf
+{
+    void test() {
+        Bool b;
+        Bool c;
+        SomeClass sc;
+        Int dummy1;
+        Int dummy2;
+
+        dummy1 = 1;
+        dummy2 = 2;
+        sc = new SomeClass();
+        sc.b = true;
+        
+        if (dummy1 < dummy2) {
+            println("dummy1 < dummy2");
+        }
+        else {
+            println("dummy1 >= dummy2");
+        }
+        
+        if (dummy1 > dummy2) {
+            println("dummy1 > dummy2");
+        }
+        else {
+            println("dummy1 <= dummy2");
+        }
+        
+        if (dummy1 <= dummy2) {
+            println("dummy1 <= dummy2");
+        }
+        else {
+            println("dummy1 > dummy2");
+        }
+        
+        if (dummy1 >= dummy2) {
+            println("dummy1 >= dummy2");
+        }
+        else {
+            println("dummy1 < dummy2");
+        }
+        
+        if (dummy1 == dummy2) {
+            println("dummy1 == dummy2");
+        }
+        else {
+            println("dummy1 != dummy2");
+        }
+
+        if (dummy1 != dummy2) {
+            println("dummy1 != dummy2");
+        }
+        else {
+            println("dummy1 == dummy2");
+        }
+
+        if (true) {
+            println("true is true");
+        }
+        else {
+            println("true is not true");
+        }
+        
+        if (false) {
+            println("false is true");
+        }
+        else {
+            println("false is not true");
+        }
+        
+        if(true) {
+            if (true) {
+                println("true is true twice");
+            }
+            else {
+                println("true is not always true");
+            }
+        }
+        else {
+            println("true is false");
+        }
+        
+        // Test if with boolean variable
+        b = true;
+        if(b) {
+            println("b is true");
+        }
+        else {
+            println("b is false");
+        }
+
+        // Test if with unary not expression
+        if(!b) {
+            println("not b is true");
+        }
+        else {
+            println("not b is false");
+        }
+        
+        if(!!b) {
+            println("not not b is true");
+        }
+        else {
+            println("not not b is false");
+        }
+
+        // Test if with binary expression on 2 variables
+        b = true;
+        c = false;
+        if(b || c) {
+            println("b or c is true");
+        }
+        else {
+            println("b or c is false");
+        }
+        if(b && c) {
+            println("b and c is true");
+        }
+        else {
+            println("b and c is false");
+        }
+
+        // Test if with binary expression with 1 variable and 1 constant
+        b = true;
+        if(b || false) {
+            println("b or false is true");
+        }
+        else {
+            println("b or false is false");
+        }
+        if(b && false) {
+            println("b and false is true");
+        }
+        else {
+            println("b and false is false");
+        }
+
+        // Test if with binary expression with 2 constants
+        if(true || false) {
+            println("true or false is true");
+        }
+        else {
+            println("true or false is false");
+        }
+        if(true && false) {
+            println("true and false is true");
+        }
+        else {
+            println("true and false is false");
+        }
+
+        // Test if expression with fields
+        if(sc.b) {
+            println("field is working fine in if expression");
+        }
+        else {
+            println("field is not working in if expression");
+        }
+
+        // Test if expression with method calls
+        if(sc.doSomething()) {
+            println("method call is working fine in if expression");
+        }
+        else {
+            println("method call is not working in if expression");
+        }
+
+        // Test if with '== true' and '== false'
+        // Parsing error!
+        /*
+        b = true;
+        if(b == true) {
+            println("b == true is true");
+        }
+        else {
+            println("b == true is false");
+        }
+        if(b == false) {
+            println("b == false is true");
+        }
+        else {
+            println("b == false is false");
+        }
+        */
+
+    }
+}
+
+class TestWhile
+{
+    void test() {
+        Int a;
+        Int b;
+        SomeClass sc;
+        
+        println("Loop with comparison with constant");
+        a = 10;
+        while(a > 0) {
+            println(a);
+            a = a - 1;
+        }
+        
+        println("Loop with comparison between variables");
+        a = 10;
+        b = 0;
+        while(a > b) {
+            println(b);
+            b = b + 1;
+        }
+        
+        println("Testing nested loop");
+        a = 0;
+        while(a < 10) {
+            b = 0;
+            while(b < 10) {
+                println(a + b);
+                b = b + 1;
+            }
+            a = a + 1;
+        }
+        
+        sc = new SomeClass();
+        sc.b = false;
+        while(sc.b) {
+            println("this shouldn't be printed");
+        }
+        while(sc.doSomething2()) {
+            println("this shouldn't be printed");
+        }
+        
+        // While with boolean literal
+        while(false) {
+            println("this shouldn't be printed");
+        }
+        
+        while(true) {
+            println("this should print forever");
+        }
+    }
+}
+
+class SomeClass
+{
+    Bool b;
+    Bool doSomething() {
+        return true;
+    }
+    Bool doSomething2() {
+        return false;
+    }
+}
