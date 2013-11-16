@@ -401,11 +401,8 @@ let ir3_method_to_arm (clist: cdata3 list) (mthd: md_decl3): (arm_instr list) =
     @ e_stmts
   in
   let basic_blocks_map = derive_basic_blocks e_stmts_and_declarations in
-  (* TODO: enable this if flag is on: *)
-  let optimized_blocks_map = if true then basic_blocks_map else eliminate_local_common_subexpression basic_blocks_map in
   let liveness_timeline = derive_liveness_timeline basic_blocks_map in
-  
-  let all_blocks = get_all_blocks optimized_blocks_map in
+  let all_blocks = get_all_blocks basic_blocks_map in
   let all_stmts = get_all_stmts all_blocks in
   let sorted_all_stmts = List.tl (List.map (fun x -> x.embedded_stmt) (List.sort (fun x y -> Pervasives.compare x.line_number y.line_number) all_stmts)) in
   
