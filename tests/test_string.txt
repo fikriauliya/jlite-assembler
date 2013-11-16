@@ -1,15 +1,27 @@
 class TestString
 {
     void main () {
-        String s;
+        String s1;
+        String s2;
         Store store;
         
-        s = "qqq";
-        println(s);
+        s1 = "qqq";
+        println(s1);
         
         store = new Store();
         store.str = "ppp";
         println(store.str);
+        
+        // Type-check error!
+        /*
+        s2 = "qqq";
+        if(s1 == s2) {
+            println("s1 is equal to s2");
+        }
+        else {
+            println("s1 is not equal to s2");
+        }
+        */
     }
 }
 class Store {
