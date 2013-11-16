@@ -1,0 +1,31 @@
+Project Assignment 3 Submission
+===============================
+We have successfully completed project assignment 3.
+For object size calculation, we simply assume that each member variable occupies 4 bytes.
+This greatly simplifies the offset calculation as we simply need to multiply by 4.
+Some optimizations are done in register allocation and lifetime analysis.
+
+Instructions
+============
+Compilation: ./make.sh
+Test cases: Located under tests/ folder.
+
+Register allocation & stack management
+======================================
+We chose to implement a rather elaborate and efficient register allocation mechanism based on variable life intervals and a heuristic that chooses to spill first the registers holding the variables that have the furthest death time.
+
+In order to make everything very efficient, we chose to have a 1-to-1 correspondence between slots on the stack and local variables: each local variable (including parameters) has a reserved position on the stack, which allows spilling them very easily when needed (without extra push/pop instructions). This may tend to make stack frames bigger, but we chose to favor speed versus spacial efficiency.
+
+Thanks to our thorough analysis of variable lifespans, we can clean our internal representation of register-to-variable allocations on a very precise basis, and we rarely need to spill registers.
+
+We even implemented an option, "let debug_restrict_registers = true/false" in "jlite_arm.ml" to force the use of a very restricted set of registers (a1..4 and v1) in order to force spilling many of them and check that the produced code still remained correct.
+
+We also made use of additional registers, like v6 and v7 (because they are not used as we don't check stack overflows) and lr, which is carefully saved before a returning jump instruction is used.
+
+Lifetime analysis
+=================
+Lifetime analysis is done by first converting statements into "enhanced_statement" which has "defs" and "uses" variables information attached. After that, the "enhanced_statement"s are grouped into basic blocks. Each of them has in/out variables information to another blocks.
+
+By iteratively calculating in/out variables process, we could arrived at a final state where no further in/out variables update is required. In this final state, we could gather the starting lifetime and ending lifetime of each variables.
+
+During the basic blocks grouping, we also remove blocks which doesn't have in/out flow connection to the starting block. We consider those block as dead code, code that never be executed.
