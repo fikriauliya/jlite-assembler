@@ -136,9 +136,9 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   (* 
     stmts => initial stmts to be grouped into blocks
     stmts_accum => temporary stmts to store what statements are pending to be flushed into blocks
-    labeled_block_id 
-    non_labeled_block_id 
-    appending_mode skip
+    labeled_block_id  => block id for those blocks started by "Label" statement. This value is always positive
+    non_labeled_block_id  => block id for those blocks started by any but "Label" statement. This valus is always negative. Started from -1
+    appending_mode skip => optimization to skip empty/dead code blocks
   *)
   let rec split_into_blocks (stmts: enhanced_stmt list) (stmts_accum: enhanced_stmt list) labeled_block_id non_labeled_block_id appending_mode skip = 
     let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
@@ -244,6 +244,9 @@ let get_all_blocks basic_blocks_map =
 let get_all_stmts (blocks:basic_block_type list) : enhanced_stmt list=
   List.flatten (List.map (fun block -> block.stmts) blocks)
 
+(* Derive liveness timeline from basic_block_map.
+We don't allow partial livetime. Instead, we group together into one long lived variable.
+ *)
 let derive_liveness_timeline (basic_blocks_map) : liveness_timeline_type = begin
   let liveness_timeline_map = Hashtbl.create 100 in
 
@@ -260,6 +263,7 @@ let derive_liveness_timeline (basic_blocks_map) : liveness_timeline_type = begin
     ) basic_blocks_map;
   in
 
+  (* Iteratively calculate in/out variables *)
   let rec calculate_in_out_variables basic_blocks_map = 
     let get_succ_blocks (cur_block: basic_block_type): basic_block_type list = 
       let cur_block_id = cur_block.block_id in
@@ -387,6 +391,7 @@ let derive_liveness_timeline (basic_blocks_map) : liveness_timeline_type = begin
 
     curr
   ) 
+    (* Initial block  *)
     {
      embedded_stmt= Label3 0; (* Dummy *)
      stmt_out_variables= Id3Set.empty;
