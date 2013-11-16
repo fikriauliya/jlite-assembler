@@ -17,6 +17,14 @@ type lines_info = {
 let string_of_timeline (tl: liveness_timeline_record) =
 	"[" ^ (string_of_int tl.start_line) ^ " - " ^ (string_of_int tl.end_line) ^ "]"
 
+(* Ir3 stmt with:
+- defs => defined variables in the statement
+- uses => used variables in the statement
+- stmt_in_variables => IN variables
+- stmt_out_variables => OUT variables
+- line_number: line number (started from 1) of the statement counted from the beginning of the method.
+Line number 0 is reserved for parameters and local variable definitions
+ *)
 type enhanced_stmt = {
   mutable embedded_stmt: ir3_stmt;
   defs: Id3Set.t;
@@ -26,7 +34,15 @@ type enhanced_stmt = {
   line_number: int;
 }
 
-(* statement lists, IN block ids, OUT block ids *)
+(* Basic block containing enhanced_stmts 
+- in_blocks => block_ids of incoming blocks
+- out_blocks => block_ids of outcoming blocs
+- in_variables => set of IN variables 
+- out_variables => set of OUT variables
+
+Block 0 is reserved for END block.
+Block 1 for starting block.
+*)
 type basic_block_type = {
   block_id: int;
   stmts: enhanced_stmt list;
@@ -49,7 +65,10 @@ let string_of_enhanced_stmt (e_stmt) = begin
   (string_of_list (Id3Set.elements e_stmt.stmt_out_variables) (fun x -> x) ", ") ^ "]";
 end
 
-
+(* Wrap simple IR3 statements in Enhanced Statements *)
+(* defs, uses, and line_number information is initialized *)
+(* stmt_in_variables and stmt_out_variables are left empty 
+  (to be filled in later by derive_lineness_timeline *)
 let ir3stmts_to_enhanced_stmts (stmts) = begin
   let get_uses_from_ir3exp(e: ir3_exp): (id3 list) = 
     let get_uses_from_idc3 (idc3_val : idc3) = 
@@ -94,9 +113,15 @@ let ir3stmts_to_enhanced_stmts (stmts) = begin
   ) stmts
 end
 
+(* Group enhanced statements into blocks
+Each block is identified by block id
+Block_id 0 is reserved to END Block
+If the block is started due to "Label" statement, the block_id will be equal to Label name
+Otherwise, the block id is negative, started from -1 and incremented by -1.
+*)
 let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
   let basic_blocks_map = Hashtbl.create 100 in
-  (* END block *)
+  (* Reserved END block *)
   Hashtbl.add basic_blocks_map 0
     {
       stmts = [];
@@ -107,6 +132,14 @@ let derive_basic_blocks (mthd_stmts: enhanced_stmt list) = begin
       block_id = 0;
     };
 
+  (* Group enhanced_stmts into blocks *)
+  (* 
+    stmts => initial stmts to be grouped into blocks
+    stmts_accum => temporary stmts to store what statements are pending to be flushed into blocks
+    labeled_block_id 
+    non_labeled_block_id 
+    appending_mode skip
+  *)
   let rec split_into_blocks (stmts: enhanced_stmt list) (stmts_accum: enhanced_stmt list) labeled_block_id non_labeled_block_id appending_mode skip = 
     let cur_block_id = if appending_mode then non_labeled_block_id else labeled_block_id in
     match stmts with
