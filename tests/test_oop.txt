@@ -87,6 +87,7 @@ class TestOop
         c3.printString();
         c4.printString();
         
+        println("");
         println("Superhero profile:");
         h.printString();
         println("");

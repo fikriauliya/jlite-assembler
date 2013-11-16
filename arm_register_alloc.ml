@@ -61,15 +61,8 @@ let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (
 
 
 
-let mtd_regs = ["a1";"a2";"a3";"a4"(*;"lr"*)]
-let reset_mtd_reg(*s*) rallocs =
-  (*
-  let _ = update_rallocs_var_at_reg rallocs (None) "a1" in
-  let _ = update_rallocs_var_at_reg rallocs (None) "a2" in
-  let _ = update_rallocs_var_at_reg rallocs (None) "a3" in
-  let _ = update_rallocs_var_at_reg rallocs (None) "a4" in
-  let _ = update_rallocs_var_at_reg rallocs (None) "lr" in
-  *)
+let mtd_regs = ["a1";"a2";"a3";"a4";"lr"]
+let reset_mtd_reg rallocs =
   let _ = map (update_rallocs_var_at_reg rallocs (None)) mtd_regs in
   ()
 

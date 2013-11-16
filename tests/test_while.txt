@@ -3,6 +3,7 @@ class TestWhile
     void main () {
         Int a;
         Int b;
+        SomeClass sc;
         
         println("Loop with comparison with constant");
         a = 10;
@@ -30,6 +31,16 @@ class TestWhile
             a = a + 1;
         }
         
+        sc = new SomeClass();
+        sc.b = false;
+        while(sc.b) {
+            println("this shouldn't be printed");
+        }
+        while(sc.doSomething()) {
+            println("this shouldn't be printed");
+        }
+        
+        // While with boolean literal
         while(false) {
             println("this shouldn't be printed");
         }
@@ -37,5 +48,13 @@ class TestWhile
         while(true) {
             println("this should print forever");
         }
+    }
+}
+
+class SomeClass
+{
+    Bool b;
+    Bool doSomething() {
+        return false;
     }
 }
