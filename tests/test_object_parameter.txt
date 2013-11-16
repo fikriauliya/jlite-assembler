@@ -1,0 +1,43 @@
+class Main {
+    void main() {
+        C1 a;
+        C1 b;
+        C2 c;
+        a = new C1();
+        b = new C1();
+        c = new C2();
+        a.a = 1;
+        println(a.getA(a)); // should print 1
+        b.a = 2;
+        println(a.getA(b)); // should print 2
+        a.a = 3;
+        println(c.getA(a)); // should print 3
+        c.setA(a,4);
+        println(c.getA(a)); // should print 4
+    }
+}
+
+class C1 {
+    Int a;
+    
+    Int getA(C1 c) {
+        return c.a;
+    }
+
+        
+}
+
+class C2 {
+    Int b;
+       
+    Int getA(C1 c) {
+        return c.a;
+    }
+
+    Int setA(C1 c, Int i) {
+        Int tmp;
+        tmp = c.a;
+        c.a = i;
+        return tmp;
+    }
+}
