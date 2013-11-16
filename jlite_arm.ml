@@ -9,10 +9,10 @@ open List
 
 
 let debug_restrict_registers = false
-and use_asm_comments = false
+and use_asm_comments = true
 
 
-let make_EMPTY = if use_asm_comments then [] else [EMPTY]
+let make_EMPTY = if use_asm_comments then [EMPTY] else []
 
 
 let labelcount = ref 0 
@@ -521,7 +521,7 @@ let ir3_program_to_arm ((classes, main_method, methods): ir3_program): arm_progr
     @ [EMPTY]
     @ [textSegment; mainExport]
     @ methods_arm
-  in if use_asm_comments
+  in if not use_asm_comments
   then filter (fun ins -> match ins with COM _ -> false | _ -> true) rez
   else rez
 
