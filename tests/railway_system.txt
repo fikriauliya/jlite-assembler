@@ -1,0 +1,168 @@
+class Main {
+    void main() {
+        TrackComponent station1;
+        TrackComponent station2;
+        TrackComponent station3;
+        TrackComponent straight1;
+        TrackComponent straight2;
+        TrackComponent straight3;
+        TrackComponent intersection;
+        Train train1;
+        Train train2;
+
+        station1 = new TrackComponent();
+        station2 = new TrackComponent();
+        station3 = new TrackComponent();
+        station1.init("station1",false,true,0);
+        station1.init("station2",false,true,1);
+        station1.init("station3",false,true,2);
+
+        straight1 = new TrackComponent();
+        straight2 = new TrackComponent();
+        straight3 = new TrackComponent();
+        straight1.init("straight1",false,false,3);
+        straight2.init("straight1",false,false,4);
+        straight3.init("straight1",false,false,5);
+
+        intersection = new TrackComponent();
+        intersection.init("intersection",false,false,6);
+
+        train1 = new Train();
+        train2 = new Train();
+        train1.init("train1",station1);
+        train2.init("train2",station2);
+
+
+        station1.connect(straight1);
+        station2.connect(straight2);
+        station3.connect(straight3);
+
+        straight1.connect(station1,intersection);
+        straight2.connect(station2,intersection);
+        straight3.connect(station3,intersection);
+
+        intersection.connect(straight1,straight2,straight3);
+
+
+        train1.move();
+        train1.move();
+        train2.move();
+        train2.move();
+        train1.move();
+        train1.move();
+        train2.move();
+        train2.move();
+        train2.move();
+    }
+}
+
+class Train {
+    String trainName;
+    TrackComponent lastComponent;
+    TrackComponent currentComponent;
+    TrackComponent nextComponent;
+
+    void init(String name, TrackComponent startComponent) {
+        trainName = name;
+        lastComponent = NULL;
+        nextComponent = NULL;
+        currentComponent = startComponent;
+        currentComponent.isOccupied = true;
+    }
+
+    void move() {
+        if (currentComponent.isStation) {
+            nextComponent = currentComponent.exit1;
+            if (!nextComponent.isOccupied) {
+                printMove(currentComponent,nextComponent);
+                setNewState(currentComponent,nextComponent);
+            } else {
+                printUnableToMove(currentComponent);
+            }
+        } else {
+            nextComponent = currentComponent.exit1;
+            if (nextComponent.index != currentComponent.index
+                    && nextComponent.index != lastComponent.index
+                    && !nextComponent.isOccupied) {
+                printMove(currentComponent,nextComponent);
+                setNewState(currentComponent,nextComponent);
+            } else {
+                nextComponent = currentComponent.exit2;
+                if (nextComponent.index != currentComponent.index
+                        && nextComponent.index != lastComponent.index
+                        && !nextComponent.isOccupied) {
+                    printMove(currentComponent,nextComponent);
+                    setNewState(currentComponent,nextComponent);
+                } else {
+                    nextComponent = currentComponent.exit3;
+                    if (nextComponent.index != currentComponent.index
+                            && nextComponent.index != lastComponent.index
+                            && !nextComponent.isOccupied) {
+                        printMove(currentComponent,nextComponent);
+                        setNewState(currentComponent,nextComponent);
+                    } else {
+                        printUnableToMove(currentComponent);
+                    }
+                }
+            }
+        }
+    }
+
+    void setNewState(TrackComponent current, TrackComponent next) {
+        lastComponent = current;
+        lastComponent.isOccupied = false;
+        currentComponent = next;
+        currentComponent.isOccupied = true;
+    }
+
+    void printUnableToMove(TrackComponent current) {
+        println(trainName);
+        println("could not move from component");
+        println(current.componentName);
+        println("");
+    }
+
+    void printMove(TrackComponent last, TrackComponent current) {
+        println(trainName);
+        println("moving from component: ");
+        println(last.componentName);
+        println("to component: ");
+        println(current.componentName);
+        println("");
+    }
+}
+
+class TrackComponent {
+    String componentName;
+    TrackComponent exit1;
+    TrackComponent exit2;
+    TrackComponent exit3;
+    Bool isOccupied;
+    Bool isStation;
+    Int index;
+
+    void init(String name, Bool station, Bool occupied, Int i) {
+        componentName = name;
+        isStation = station;
+        isOccupied = occupied;
+        index = i;
+        exit1 = this;
+        exit2 = this;
+        exit3 = this;
+    }
+
+    void connect(TrackComponent c) {
+        exit1 = c;
+    }
+
+    void connect(TrackComponent c1, TrackComponent c2) {
+        exit1 = c1;
+        exit2 = c2;
+    }
+
+    void connect(TrackComponent c1, TrackComponent c2, TrackComponent c3) {
+        exit1 = c1;
+        exit2 = c2;
+        exit3 = c3;
+    }
+}
