@@ -8,6 +8,12 @@ open List
 let use_heuristic_for_spilling_registers = true
 and display_register_cleanings = false
 
+let register_exists (rallocs: reg_allocations) (r: reg) =
+  try
+    let (_, _) = List.find (fun (reg_name, _) -> reg_name = r) rallocs in
+    true
+  with
+  | Not_found -> false
 
 let var_of_register (rallocs: reg_allocations) (r: reg): (id3 option) =
   try
@@ -63,7 +69,8 @@ let unspill_variable (stack_frame: type_layout) (dst_reg: reg) (var_name: id3) (
 
 let mtd_regs = ["a1";"a2";"a3";"a4";"lr"]
 let reset_mtd_reg rallocs =
-  let _ = map (update_rallocs_var_at_reg rallocs (None)) mtd_regs in
+  let mtd_regs_used = filter (register_exists rallocs) mtd_regs in
+  let _ = map (update_rallocs_var_at_reg rallocs (None)) mtd_regs_used in
   ()
 
 (*
@@ -79,6 +86,7 @@ let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations
 *)
 
 let request_method_call_regs stack_frame rallocs : 'a list =
+  let mtd_regs_used = filter (register_exists rallocs) mtd_regs in
   let request_method_call_reg (stack_frame: type_layout) (rallocs: reg_allocations) (r: reg) =
     match var_of_register rallocs r with
     | Some v ->
@@ -88,7 +96,7 @@ let request_method_call_regs stack_frame rallocs : 'a list =
       (* No other variable exists in a_x register, just load *)
       []
   in
-  let ret = flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs) in
+  let ret = flatten (map (request_method_call_reg stack_frame rallocs) mtd_regs_used) in
   let () = reset_mtd_reg rallocs in
   ret
 
