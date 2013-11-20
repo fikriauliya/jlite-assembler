@@ -8,7 +8,7 @@ open Printf
 open List
 
 
-let debug_restrict_registers = false
+let debug_restrict_registers = true
 and use_asm_comments = true
 
 
@@ -84,7 +84,7 @@ let derive_layout (clist: cdata3 list) ((cname,decls): cdata3): cname3 * type_la
 
 let derive_stack_frame (clist: cdata3 list) (params: (var_decl3 list)) (localvars: (var_decl3 list)): type_layout =
   let _, params_layout = derive_precise_layout clist ("", params) 4 true in
-  let _, vars_layout = derive_precise_layout clist ("", localvars) (-28) false in
+  let _, vars_layout = derive_precise_layout clist ("", localvars) (-36) false in
   params_layout @ vars_layout
 
 
