@@ -8,7 +8,7 @@ open Printf
 open List
 
 
-let debug_restrict_registers = true
+let debug_restrict_registers = false
 and use_asm_comments = true
 
 
