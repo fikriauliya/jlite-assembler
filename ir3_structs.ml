@@ -119,6 +119,7 @@ let rec string_of_ir3_type e:string =
     | StringT -> "String"
 	| VoidT -> "Void"
 	| ObjectT c -> c
+	| Unknown -> "?"
 
 (* display an id or constant: IRC3 *)
 let rec string_of_idc3 e:string =
